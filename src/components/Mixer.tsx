@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { engine } from "../audio/AudioEngine";
+import ChannelFxPanel from "./ChannelFxPanel";
 
 export default function Mixer() {
   const tracks = useStore((s) => s.project.tracks);
@@ -9,6 +10,7 @@ export default function Mixer() {
   const updateTrack = useStore((s) => s.updateTrack);
   const setTrackFx = useStore((s) => s.setTrackFx);
   const [level, setLevel] = useState(0);
+  const [fxTrack, setFxTrack] = useState<string | null>(null);
   const raf = useRef(0);
 
   useEffect(() => {
@@ -64,8 +66,15 @@ export default function Mixer() {
               >
                 S
               </button>
+              <button
+                className={"minibtn fxbtn" + (t.fx.delay > 0 || t.fx.comp > 0 ? " on" : "")}
+                title="Open the full effects rack for this channel: sweepable EQ, reverb, delay and compression"
+                onClick={() => setFxTrack(t.id)}
+              >
+                ⚙
+              </button>
             </div>
-            <div className="fx" title="Per-channel effects: 3-band EQ and a reverb send. You can also set these by command, e.g. 'add reverb to channel 1' or 'cut the lows on channel 2'.">
+            <div className="fx" title="Quick effects: 3-band EQ and a reverb send. Click the gear for the full rack (EQ sweep, delay, compression). You can also set these by command, e.g. 'add reverb to channel 1'.">
               <div className="fxrow">
                 <span>LO</span>
                 <input className="slider" type="range" min={-12} max={12} step={1} value={t.fx.eqLow}
@@ -113,6 +122,7 @@ export default function Mixer() {
           <div className="hint">{Math.round(master * 100)}%</div>
         </div>
       </div>
+      {fxTrack && <ChannelFxPanel trackId={fxTrack} onClose={() => setFxTrack(null)} />}
     </div>
   );
 }

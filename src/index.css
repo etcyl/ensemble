@@ -59,8 +59,12 @@ input { font-family: inherit; }
 }
 .cmd-input::placeholder { color: var(--text-faint); }
 .cmd-input:focus { outline: none; border-color: var(--plum); box-shadow: 0 0 0 2px rgba(169,134,186,0.18); }
+.cmd-form { flex: 1; display: flex; }
 .cmd-heard { font-size: 11px; color: var(--plum); font-style: italic; white-space: nowrap; }
 .cmd-feedback { font-size: 12px; color: var(--sage); white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+.cmd-suggest { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--rose); white-space: nowrap; }
+.cmd-chip { background: var(--ink-700); border: 1px solid var(--rose-deep); color: var(--rose); border-radius: 999px; padding: 3px 10px; font-size: 11px; white-space: nowrap; transition: all 0.12s; }
+.cmd-chip:hover { background: var(--rose-deep); color: #fff; }
 
 /* ---------- top bar ---------- */
 .topbar {
@@ -262,6 +266,15 @@ select.voicepick option, select.kit-select option { background: var(--ink-800); 
 .fxrow > span { font-size: 7.5px; letter-spacing: 0.3px; color: var(--text-faint); width: 18px; flex-shrink: 0; }
 .fxrow input.slider { flex: 1; height: 4px; }
 .fxrow.rev input.slider::-webkit-slider-thumb { background: var(--plum); box-shadow: 0 0 6px rgba(169,134,186,0.6); }
+.minibtn.fxbtn { font-size: 12px; }
+.minibtn.fxbtn.on { background: var(--plum); border-color: var(--plum); color: #1a0f20; }
+
+/* channel fx panel */
+.fxp-h { margin: 14px 0 6px; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--amber); border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.fxp-row { display: grid; grid-template-columns: 76px 1fr 54px; align-items: center; gap: 10px; margin: 5px 0; }
+.fxp-label { font-size: 11px; color: var(--text-dim); }
+.fxp-val { font-size: 11px; color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
+.fxp-row .slider { width: 100%; }
 .strip.master { background: linear-gradient(180deg, var(--ink-600), var(--ink-700)); border-color: var(--mustard); }
 .meter { width: 7px; flex: 1; background: var(--ink-900); border-radius: 4px; overflow: hidden; position: relative; }
 .meter .fill { position: absolute; bottom: 0; left: 0; right: 0;
@@ -270,7 +283,7 @@ select.voicepick option, select.kit-select option { background: var(--ink-800); 
 
 /* ---------- modal ---------- */
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); display: grid; place-items: center; z-index: 50; }
-.modal { width: 460px; background: var(--ink-700); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 22px; }
+.modal { width: 460px; max-height: 90vh; overflow: auto; background: var(--ink-700); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 22px; }
 .modal h2 { margin: 0 0 4px; font-size: 18px; }
 .modal p { margin: 0 0 16px; color: var(--text-dim); font-size: 13px; }
 .proj-list { max-height: 240px; overflow: auto; display: flex; flex-direction: column; gap: 6px; margin: 12px 0; }

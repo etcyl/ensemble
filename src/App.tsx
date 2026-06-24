@@ -3,7 +3,7 @@ import { useStore, uid } from "./state/store";
 import { engine } from "./audio/AudioEngine";
 import { LiveRecorder, base64ToArrayBuffer, encodeWavBase64, computePeaks, downloadWav } from "./audio/Recorder";
 import { VoiceControl } from "./voice/VoiceControl";
-import { runCommand, registerRecorder, registerHarmonizeOpener, registerMixdown } from "./commands";
+import { runCommand, suggest, registerRecorder, registerHarmonizeOpener, registerMixdown } from "./commands";
 import CommandBar from "./components/CommandBar";
 import Transport from "./components/Transport";
 import Arrange from "./components/Arrange";
@@ -138,6 +138,7 @@ export default function App() {
   const dispatch = (text: string) => {
     const r = runCommand(text);
     useStore.getState().setFeedback(r.message);
+    useStore.getState().setSuggestions(r.ok ? [] : suggest(text));
   };
 
   // wire the command layer's bridges to the React-side handlers (once)

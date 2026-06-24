@@ -213,13 +213,20 @@ bullets([
   "S (Solo): hears only the soloed track(s) and mutes everything else.",
   "Master strip: overall output volume with a live level meter. Keep the meter out of the red to avoid clipping.",
 ]);
-h2("Per-channel effects: EQ and Reverb");
-p("Each channel strip also has a 3-band equalizer and a reverb send:");
+h2("Per-channel effects");
+p("Each channel strip has quick effects plus a full effects rack:");
 bullets([
-  "LO / MID / HI: boost or cut the lows, mids and highs (a shelving + peaking EQ, -12 to +12 dB).",
-  "REV: how much of that channel is sent to a shared reverb, from dry to wet.",
+  "On the strip: LO / MID / HI EQ (boost or cut, -12 to +12 dB) and a REV reverb send.",
+  "Click the gear (the small cog button) for the full rack on that channel.",
 ]);
-p("You do not have to touch the sliders. Anything here can be driven by a typed or spoken command - see section 10 - for example \"add reverb to channel 1\" or \"cut the lows on channel 2\". The effects are baked into the exported mixdown.");
+p("The full rack adds:");
+bullets([
+  "Sweepable EQ: set the frequency of each band and the width (Q) of the mid band, so you can hunt for a specific tone rather than fixed bands.",
+  "Reverb: send amount.",
+  "Delay (echo): amount, time between echoes, and feedback (how many repeats).",
+  "Compression: evens out the level and adds punch - higher amount = more squash.",
+]);
+p("You do not have to touch any of it by hand. Everything here can be driven by a typed or spoken command - see section 10 - for example \"add reverb to channel 1\", \"add delay to channel 2\", \"compress channel 1\", or \"cut the lows on channel 2\". All effects are baked into the exported mixdown.");
 
 h1("9. Harmonize - automatic accompaniment");
 p("Harmonize adds instrument parts (and optionally drums) that fit your song. It can work from scratch, or it can listen to an existing track, show you what it hears, and let you correct everything before it plays a single note.");
@@ -280,6 +287,7 @@ bullets([
 
 h2("How a command is understood");
 p("Whether typed or spoken, the text is lowercased and matched against a small, forgiving set of keyword patterns. It looks for intent rather than exact phrases, and extracts a channel number (as a word or digit) when present: 'bring up the highs on channel three' is read as EQ + high band + boost + channel 3. Voice recognition runs continuously, so you can issue one command after another.");
+p("If a command is not understood, the command bar shows a few clickable 'try:' suggestions based on what you typed - click one to run it. This makes the vocabulary discoverable without a manual.");
 
 h2("Command reference");
 table(
@@ -291,6 +299,8 @@ table(
     ["erase channel N", "\"clear channel 2\"", "Removes the recorded clips on that channel. \"clear the beat\" empties the Beat Maker."],
     ["mute / solo channel N", "\"mute channel 3\"", "Mutes, unmutes or solos a channel."],
     ["add reverb to channel N", "\"more reverb on 1\", \"remove reverb\"", "Sets the channel's reverb send (add / more / less / remove)."],
+    ["add delay to channel N", "\"more delay on 2\", \"remove delay\"", "Sets the channel's delay/echo send."],
+    ["compress channel N", "\"more compression on 1\"", "Sets the channel's compression amount."],
     ["EQ a channel", "\"bring up the highs on channel 2\", \"cut the lows on 1\"", "Boosts or cuts the low / mid / high band on that channel."],
     ["louder / softer channel N", "\"turn up channel 2\"", "Channel volume (or master, if no channel is named)."],
     ["pan channel N left/right", "\"pan channel 1 left\"", "Positions the channel in the stereo field."],

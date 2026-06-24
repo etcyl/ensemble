@@ -50,15 +50,44 @@ export interface Clip {
 
 // per-track insert effects
 export interface TrackFx {
-  reverb: number; // 0..1 wet send
+  // 3-band EQ, sweepable
   eqLow: number; // dB -12..+12 (low shelf)
-  eqMid: number; // dB -12..+12 (mid peak)
+  eqLowFreq: number; // Hz
+  eqMid: number; // dB -12..+12 (peaking)
+  eqMidFreq: number; // Hz
+  eqMidQ: number; // 0.3..8
   eqHigh: number; // dB -12..+12 (high shelf)
+  eqHighFreq: number; // Hz
+  // reverb send
+  reverb: number; // 0..1
+  // delay / echo
+  delay: number; // 0..1 wet
+  delayTime: number; // seconds
+  delayFeedback: number; // 0..0.9
+  // compression
+  comp: number; // 0..1 amount
 }
 
 export function defaultFx(): TrackFx {
-  return { reverb: 0, eqLow: 0, eqMid: 0, eqHigh: 0 };
+  return {
+    eqLow: 0, eqLowFreq: 160,
+    eqMid: 0, eqMidFreq: 1000, eqMidQ: 0.9,
+    eqHigh: 0, eqHighFreq: 4500,
+    reverb: 0,
+    delay: 0, delayTime: 0.3, delayFeedback: 0.35,
+    comp: 0,
+  };
 }
+
+// per-field clamp ranges, shared by the store and UI
+export const FX_RANGES: Record<keyof TrackFx, [number, number]> = {
+  eqLow: [-12, 12], eqLowFreq: [40, 500],
+  eqMid: [-12, 12], eqMidFreq: [200, 6000], eqMidQ: [0.3, 8],
+  eqHigh: [-12, 12], eqHighFreq: [1500, 12000],
+  reverb: [0, 1],
+  delay: [0, 1], delayTime: [0.05, 1.2], delayFeedback: [0, 0.9],
+  comp: [0, 1],
+};
 
 export interface Track {
   id: string;

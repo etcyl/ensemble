@@ -112,6 +112,32 @@ export function runCommand(raw: string): CommandResult {
     return ok(`Reverb on ${chName(tr)}: ${Math.round(Math.max(0, Math.min(1, v)) * 100)}%.`);
   }
 
+  // --- delay / echo ---
+  if (/\bdelay\b|\becho\b/.test(t)) {
+    const tr = targetTrack(t);
+    if (!tr) return no("No channel for delay.");
+    let v = tr.fx.delay;
+    if (/\b(remove|no|kill|off|none)\b/.test(t)) v = 0;
+    else if (DOWN.test(t)) v = v - 0.15;
+    else if (/\bmore\b|increase/.test(t)) v = (v || 0.3) + 0.15;
+    else v = Math.max(v, 0.4);
+    S.setTrackFx(tr.id, { delay: v });
+    return ok(`Delay on ${chName(tr)}: ${Math.round(Math.max(0, Math.min(1, v)) * 100)}%.`);
+  }
+
+  // --- compression ---
+  if (/\bcompress|compression\b|\bcomp\b/.test(t)) {
+    const tr = targetTrack(t);
+    if (!tr) return no("No channel to compress.");
+    let v = tr.fx.comp;
+    if (/\b(remove|no|kill|off|none)\b/.test(t)) v = 0;
+    else if (DOWN.test(t)) v = v - 0.2;
+    else if (/\bmore\b|increase|harder/.test(t)) v = (v || 0.3) + 0.2;
+    else v = Math.max(v, 0.5);
+    S.setTrackFx(tr.id, { comp: v });
+    return ok(`Compression on ${chName(tr)}: ${Math.round(Math.max(0, Math.min(1, v)) * 100)}%.`);
+  }
+
   // --- EQ ---
   if (/\beq\b|equaliz/.test(t) || (band(t) && (UP.test(t) || DOWN.test(t)))) {
     const tr = targetTrack(t);
@@ -176,4 +202,35 @@ export function runCommand(raw: string): CommandResult {
   if (/\b(play|start|go|begin)\b/.test(t)) { S.play(); return ok("Playing."); }
 
   return no(`Sorry, I didn't understand "${raw}".`);
+}
+
+// Suggest a few likely commands for an unrecognized input, biased by any words
+// the user already typed (channel number, effect names, etc.).
+export function suggest(raw: string): string[] {
+  const t = raw.toLowerCase();
+  const tracks = useStore.getState().project.tracks;
+  const n = (() => { const m = t.match(/\b(\d{1,2})\b/); return m ? +m[1] : null; })();
+  const ch = n && n >= 1 && n <= tracks.length ? n : 1;
+  const pool: { k: RegExp; s: string }[] = [
+    { k: /reverb|verb|wet|space/, s: `add reverb to channel ${ch}` },
+    { k: /delay|echo/, s: `add delay to channel ${ch}` },
+    { k: /comp|squash|punch/, s: `add compression to channel ${ch}` },
+    { k: /eq|bass|low|treble|high|mid|bright/, s: `bring up the highs on channel ${ch}` },
+    { k: /record|rec|arm|take/, s: `record channel ${ch}` },
+    { k: /play(back)?|monitor/, s: `set channel ${ch} to playback` },
+    { k: /erase|clear|delete|wipe/, s: `erase channel ${ch}` },
+    { k: /mute|silence/, s: `mute channel ${ch}` },
+    { k: /solo|alone/, s: `solo channel ${ch}` },
+    { k: /loud|soft|volume|gain/, s: `turn up channel ${ch}` },
+    { k: /pan|left|right|stereo/, s: `pan channel ${ch} left` },
+    { k: /tempo|bpm|speed|fast|slow/, s: `set tempo to 120` },
+    { k: /loop|repeat/, s: `loop on` },
+    { k: /metro|click|beat keeper/, s: `metronome off` },
+    { k: /harmon|accompan|instrument|drums|bass|keys/, s: `harmonize` },
+    { k: /export|bounce|mixdown|render|wav|save audio/, s: `export` },
+  ];
+  const hits = pool.filter((p) => p.k.test(t)).map((p) => p.s);
+  if (hits.length) return Array.from(new Set(hits)).slice(0, 4);
+  // generic starter set
+  return [`record channel ${ch}`, `add reverb to channel ${ch}`, `set tempo to 120`, `harmonize`];
 }

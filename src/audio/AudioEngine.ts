@@ -1,4 +1,5 @@
 import type { Project, DrumVoice, TrackFx } from "../types";
+import { defaultFx } from "../types";
 import { playDrum } from "./DrumSynth";
 import { playNote } from "./InstrumentSynth";
 
@@ -9,10 +10,57 @@ interface TrackNodes {
   low: BiquadFilterNode;
   mid: BiquadFilterNode;
   high: BiquadFilterNode;
+  comp: DynamicsCompressorNode;
   dry: GainNode;
   wet: GainNode; // reverb send level
   conv: ConvolverNode;
+  delayNode: DelayNode;
+  delayWet: GainNode;
+  delayFb: GainNode;
   pan: StereoPannerNode;
+}
+
+// Build one track's effect chain: input -> EQ -> comp -> [dry + reverb + delay] -> pan -> master
+function buildTrackChain(ctx: BaseAudioContext, master: AudioNode, impulse: AudioBuffer): TrackNodes {
+  const gain = ctx.createGain();
+  const low = ctx.createBiquadFilter(); low.type = "lowshelf";
+  const mid = ctx.createBiquadFilter(); mid.type = "peaking";
+  const high = ctx.createBiquadFilter(); high.type = "highshelf";
+  const comp = ctx.createDynamicsCompressor();
+  const dry = ctx.createGain();
+  const wet = ctx.createGain(); wet.gain.value = 0;
+  const conv = ctx.createConvolver(); conv.buffer = impulse;
+  const delayNode = ctx.createDelay(2);
+  const delayWet = ctx.createGain(); delayWet.gain.value = 0;
+  const delayFb = ctx.createGain(); delayFb.gain.value = 0;
+  const pan = ctx.createStereoPanner();
+
+  gain.connect(low); low.connect(mid); mid.connect(high); high.connect(comp);
+  comp.connect(dry); dry.connect(pan);
+  comp.connect(conv); conv.connect(wet); wet.connect(pan);
+  comp.connect(delayNode);
+  delayNode.connect(delayWet); delayWet.connect(pan);
+  delayNode.connect(delayFb); delayFb.connect(delayNode); // feedback loop
+  pan.connect(master);
+  return { gain, low, mid, high, comp, dry, wet, conv, delayNode, delayWet, delayFb, pan };
+}
+
+function applyFxToNodes(n: TrackNodes, fx: TrackFx) {
+  n.low.frequency.value = fx.eqLowFreq; n.low.gain.value = fx.eqLow;
+  n.mid.frequency.value = fx.eqMidFreq; n.mid.Q.value = fx.eqMidQ; n.mid.gain.value = fx.eqMid;
+  n.high.frequency.value = fx.eqHighFreq; n.high.gain.value = fx.eqHigh;
+  // compressor: amount maps threshold + ratio (amount 0 = effectively transparent)
+  n.comp.threshold.value = -6 - fx.comp * 34;
+  n.comp.ratio.value = 1 + fx.comp * 11;
+  n.comp.knee.value = 24;
+  n.comp.attack.value = 0.005;
+  n.comp.release.value = 0.2;
+  n.wet.gain.value = Math.min(0.9, fx.reverb);
+  n.delayWet.gain.value = Math.min(0.9, fx.delay);
+  n.delayNode.delayTime.value = fx.delayTime;
+  n.delayFb.gain.value = Math.min(0.9, fx.delayFeedback);
+  // keep dry mostly full; trim a touch as sends rise
+  n.dry.gain.value = 1 - Math.min(0.4, (fx.reverb + fx.delay) * 0.2);
 }
 
 // a decaying-noise impulse response for a simple, CPU-cheap reverb
@@ -89,22 +137,8 @@ class AudioEngine {
   private nodes(trackId: string): TrackNodes {
     let n = this.trackNodes.get(trackId);
     if (!n) {
-      const ctx = this.ctx!;
-      if (!this.impulse) this.impulse = makeImpulse(ctx);
-      const gain = ctx.createGain();
-      const low = ctx.createBiquadFilter(); low.type = "lowshelf"; low.frequency.value = 160;
-      const mid = ctx.createBiquadFilter(); mid.type = "peaking"; mid.frequency.value = 1000; mid.Q.value = 0.9;
-      const high = ctx.createBiquadFilter(); high.type = "highshelf"; high.frequency.value = 4500;
-      const dry = ctx.createGain();
-      const wet = ctx.createGain(); wet.gain.value = 0;
-      const conv = ctx.createConvolver(); conv.buffer = this.impulse;
-      const pan = ctx.createStereoPanner();
-      // input -> EQ -> [dry + reverb] -> pan -> master
-      gain.connect(low); low.connect(mid); mid.connect(high);
-      high.connect(dry); dry.connect(pan);
-      high.connect(conv); conv.connect(wet); wet.connect(pan);
-      pan.connect(this.master);
-      n = { gain, low, mid, high, dry, wet, conv, pan };
+      if (!this.impulse) this.impulse = makeImpulse(this.ctx!);
+      n = buildTrackChain(this.ctx!, this.master, this.impulse);
       this.trackNodes.set(trackId, n);
     }
     return n;
@@ -119,12 +153,7 @@ class AudioEngine {
 
   applyTrackFx(trackId: string, fx: TrackFx) {
     if (!this.ctx) return;
-    const n = this.nodes(trackId);
-    n.low.gain.value = fx.eqLow;
-    n.mid.gain.value = fx.eqMid;
-    n.high.gain.value = fx.eqHigh;
-    n.wet.gain.value = Math.min(0.9, fx.reverb);
-    n.dry.gain.value = 1 - Math.min(0.5, fx.reverb * 0.4);
+    applyFxToNodes(this.nodes(trackId), fx);
   }
 
   // store decoded audio for a clip
@@ -324,23 +353,12 @@ class AudioEngine {
     const anySolo = p.tracks.some((t) => t.soloed);
     const gainFor = new Map<string, GainNode>();
     for (const t of p.tracks) {
-      const fx = t.fx ?? { reverb: 0, eqLow: 0, eqMid: 0, eqHigh: 0 };
-      const g = octx.createGain();
-      const low = octx.createBiquadFilter(); low.type = "lowshelf"; low.frequency.value = 160; low.gain.value = fx.eqLow;
-      const mid = octx.createBiquadFilter(); mid.type = "peaking"; mid.frequency.value = 1000; mid.Q.value = 0.9; mid.gain.value = fx.eqMid;
-      const high = octx.createBiquadFilter(); high.type = "highshelf"; high.frequency.value = 4500; high.gain.value = fx.eqHigh;
-      const dry = octx.createGain(); dry.gain.value = 1 - Math.min(0.5, fx.reverb * 0.4);
-      const wet = octx.createGain(); wet.gain.value = Math.min(0.9, fx.reverb);
-      const conv = octx.createConvolver(); conv.buffer = impulse;
-      const pan = octx.createStereoPanner();
+      const n = buildTrackChain(octx, master, impulse);
+      applyFxToNodes(n, t.fx ?? defaultFx());
       const audible = !t.muted && (!anySolo || t.soloed);
-      g.gain.value = audible ? t.volume : 0;
-      pan.pan.value = t.pan;
-      g.connect(low); low.connect(mid); mid.connect(high);
-      high.connect(dry); dry.connect(pan);
-      high.connect(conv); conv.connect(wet); wet.connect(pan);
-      pan.connect(master);
-      gainFor.set(t.id, g);
+      n.gain.gain.value = audible ? t.volume : 0;
+      n.pan.pan.value = t.pan;
+      gainFor.set(t.id, n.gain);
     }
 
     const DRUMS: DrumVoice[] = ["kick", "snare", "hat", "clap", "tom", "ride"];

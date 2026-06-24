@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { Project, Track, DrumVoice, DrumPattern, TrackFx } from "../types";
-import { defaultFx } from "../types";
+import { defaultFx, FX_RANGES } from "../types";
 import { engine } from "../audio/AudioEngine";
 import { loadAutosave, saveAutosave } from "./persistence";
 import { DRUM_KITS, defaultSounds } from "../audio/DrumSynth";
@@ -80,6 +80,7 @@ interface State {
   voiceOn: boolean;
   lastVoice: string;
   feedback: string;
+  suggestions: string[];
 
   setProject: (p: Project) => void;
   rename: (name: string) => void;
@@ -113,6 +114,7 @@ interface State {
   setVoiceOn: (b: boolean) => void;
   setLastVoice: (s: string) => void;
   setFeedback: (s: string) => void;
+  setSuggestions: (s: string[]) => void;
   addClipToArmed: (clip: Track["clips"][number]) => void;
   importTrack: (name: string, clip: Clip) => string;
 
@@ -137,7 +139,7 @@ function normalize(p: Project): Project {
   if (!p.harmonize) p.harmonize = defaultHarmonize();
   if (p.harmonize.style === undefined) p.harmonize.style = "pop";
   if (p.harmonize.addDrums === undefined) p.harmonize.addDrums = false;
-  for (const t of p.tracks) if (!t.fx) t.fx = defaultFx();
+  for (const t of p.tracks) t.fx = { ...defaultFx(), ...(t.fx ?? {}) };
   return p;
 }
 
@@ -164,6 +166,7 @@ export const useStore = create<State>((set, get) => {
     voiceOn: false,
     lastVoice: "",
     feedback: "",
+    suggestions: [],
 
     setProject: (raw) => {
       const p = normalize(raw);
@@ -215,10 +218,11 @@ export const useStore = create<State>((set, get) => {
       const tracks = p.tracks.map((t) => {
         if (t.id !== id) return t;
         const fx = { ...t.fx, ...patch };
-        fx.reverb = clamp(fx.reverb, 0, 1);
-        fx.eqLow = clamp(fx.eqLow, -12, 12);
-        fx.eqMid = clamp(fx.eqMid, -12, 12);
-        fx.eqHigh = clamp(fx.eqHigh, -12, 12);
+        for (const k in FX_RANGES) {
+          const key = k as keyof TrackFx;
+          const [lo, hi] = FX_RANGES[key];
+          fx[key] = clamp(fx[key], lo, hi);
+        }
         return { ...t, fx };
       });
       commit({ ...p, tracks });
@@ -292,6 +296,7 @@ export const useStore = create<State>((set, get) => {
     setVoiceOn: (b) => set({ voiceOn: b }),
     setLastVoice: (s) => set({ lastVoice: s }),
     setFeedback: (s) => set({ feedback: s }),
+    setSuggestions: (s) => set({ suggestions: s }),
 
     addClipToArmed: (clip) => {
       const p = get().project;
