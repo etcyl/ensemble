@@ -1,0 +1,65 @@
+{
+  "name": "ensemble-daw",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "description": "Ensemble - a simple, fast DAW",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "desktop:dev": "concurrently -k \"vite\" \"wait-on tcp:5180 && cross-env ELECTRON_START_URL=http://localhost:5180 electron .\"",
+    "desktop": "npm run build && electron .",
+    "icon": "node scripts/make-icon.cjs",
+    "guide": "node scripts/make-guide.cjs",
+    "dist": "npm run icon && npm run build && electron-builder",
+    "dist:win": "npm run icon && npm run build && electron-builder --win",
+    "dist:mac": "npm run icon && npm run build && electron-builder --mac",
+    "dist:linux": "npm run icon && npm run build && electron-builder --linux"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^9.0.1",
+    "cross-env": "^7.0.3",
+    "electron": "^32.1.2",
+    "electron-builder": "^25.1.8",
+    "pdfkit": "^0.15.2",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.2",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.ensemble.studio",
+    "productName": "Ensemble",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "artifactName": "Ensemble-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.music"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Audio"
+    }
+  }
+}
