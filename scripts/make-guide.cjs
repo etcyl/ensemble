@@ -213,6 +213,13 @@ bullets([
   "S (Solo): hears only the soloed track(s) and mutes everything else.",
   "Master strip: overall output volume with a live level meter. Keep the meter out of the red to avoid clipping.",
 ]);
+h2("Per-channel effects: EQ and Reverb");
+p("Each channel strip also has a 3-band equalizer and a reverb send:");
+bullets([
+  "LO / MID / HI: boost or cut the lows, mids and highs (a shelving + peaking EQ, -12 to +12 dB).",
+  "REV: how much of that channel is sent to a shared reverb, from dry to wet.",
+]);
+p("You do not have to touch the sliders. Anything here can be driven by a typed or spoken command - see section 10 - for example \"add reverb to channel 1\" or \"cut the lows on channel 2\". The effects are baked into the exported mixdown.");
 
 h1("9. Harmonize - automatic accompaniment");
 p("Harmonize adds instrument parts (and optionally drums) that fit your song. It can work from scratch, or it can listen to an existing track, show you what it hears, and let you correct everything before it plays a single note.");
@@ -251,10 +258,19 @@ table(
 );
 p("Generated parts are ordinary instrument tracks. You can solo them, change their volume and pan in the Mixer, or remove them all with 'Remove generated' in the Harmonize panel.");
 
-h1("10. Voice control");
-p("Ensemble can be driven hands-free, which is handy when an instrument is already in your hands. Click Voice in the top bar to start listening (the button glows and a 'listening' indicator appears). Click it again to stop.");
+h1("10. Commands: type it, speak it, or click it");
+p("Ensemble has one command system with three front-ends, so you never have to remember a different vocabulary:");
+bullets([
+  "Type: use the command bar under the transport. Type something like 'add reverb to channel 1' and press Enter.",
+  "Speak: click Voice (top bar) and say the same thing. Speech is turned into text and run through the exact same command parser.",
+  "Click: the buttons, faders and knobs do the same actions directly. Typing 'mute channel 2' and clicking that channel's M button are equivalent.",
+]);
+p("After any command, the command bar shows a short confirmation (for example 'Reverb on channel 1 (40%).'). Channels are numbered top to bottom, matching the mixer order.");
+callout("One grammar, many phrasings", "Parsing looks for intent and a channel number, not exact words. 'record channel one', 'record on channel 1', and 'arm channel 1' all do the same thing. Numbers work as words or digits.");
 
-h2("How speech becomes text");
+h2("Voice and how speech becomes text");
+p("Click Voice in the top bar to start listening (the button glows and a 'listening' indicator appears). Click again to stop.");
+
 p("Voice control uses the browser's built-in Web Speech API (SpeechRecognition). In a Chromium browser (Chrome or Microsoft Edge), the browser streams short snippets of microphone audio to its speech service and returns a text transcript. Because of that:");
 bullets([
   "It needs an internet connection and microphone permission.",
@@ -263,21 +279,26 @@ bullets([
 ]);
 
 h2("How a command is understood");
-p("Ensemble takes the recognized transcript, lowercases it, and matches it against a small, forgiving set of keyword patterns. It looks for intent rather than exact phrases: any sentence containing 'stop' stops playback; 'set the tempo to one twenty eight' pulls the number 128 out of the text. Recognition runs continuously, so you can issue one command after another without re-clicking.");
+p("Whether typed or spoken, the text is lowercased and matched against a small, forgiving set of keyword patterns. It looks for intent rather than exact phrases, and extracts a channel number (as a word or digit) when present: 'bring up the highs on channel three' is read as EQ + high band + boost + channel 3. Voice recognition runs continuously, so you can issue one command after another.");
 
 h2("Command reference");
 table(
-  ["Say something like", "Also", "What happens"],
+  ["Type or say", "Examples", "What happens"],
   [
-    ["\"play\", \"start\", \"go\"", "-", "Starts playback."],
-    ["\"stop\", \"halt\", \"pause\"", "-", "Stops playback."],
-    ["\"record\", \"arm\"", "R key", "Starts recording onto the armed track."],
-    ["\"add a track\"", "-", "Adds a new audio track."],
-    ["\"set tempo to 128\"", "\"bpm 128\"", "Sets the project tempo to the spoken number."],
-    ["\"metronome off\"", "\"metronome on\"", "Toggles the click track."],
-    ["\"louder\" / \"softer\"", "\"turn up/down\"", "Nudges the master volume up or down."],
-    ["\"harmonize\"", "\"add drums/bass\"", "Opens the Harmonize panel."],
-    ["\"export\", \"bounce\", \"mixdown\"", "\"render\"", "Renders the song to a .wav download."],
+    ["play / stop", "\"play\", \"stop\"", "Starts or stops playback."],
+    ["record channel N", "\"record channel 1\"", "Arms that channel and starts recording from the mic."],
+    ["set channel N to playback", "\"playback channel 1\"", "Takes the channel out of record so it just plays back."],
+    ["erase channel N", "\"clear channel 2\"", "Removes the recorded clips on that channel. \"clear the beat\" empties the Beat Maker."],
+    ["mute / solo channel N", "\"mute channel 3\"", "Mutes, unmutes or solos a channel."],
+    ["add reverb to channel N", "\"more reverb on 1\", \"remove reverb\"", "Sets the channel's reverb send (add / more / less / remove)."],
+    ["EQ a channel", "\"bring up the highs on channel 2\", \"cut the lows on 1\"", "Boosts or cuts the low / mid / high band on that channel."],
+    ["louder / softer channel N", "\"turn up channel 2\"", "Channel volume (or master, if no channel is named)."],
+    ["pan channel N left/right", "\"pan channel 1 left\"", "Positions the channel in the stereo field."],
+    ["set tempo to N", "\"set tempo to 128\"", "Sets the project tempo."],
+    ["metronome / loop on/off", "\"metronome off\", \"loop on\"", "Toggles the click or looping."],
+    ["add a track", "\"new channel\"", "Adds an audio track."],
+    ["harmonize", "\"add drums\"", "Opens the Harmonize panel."],
+    ["export / bounce / mixdown", "\"render\"", "Renders the song to a .wav download."],
   ]
 );
 

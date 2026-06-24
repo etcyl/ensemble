@@ -1,4 +1,5 @@
 import type { DrumPattern, DrumVoice, HarmonizeSettings, InstrumentSound, Note, Track } from "../types";
+import { defaultFx } from "../types";
 
 export const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -131,6 +132,7 @@ function mkTrack(sound: InstrumentSound, notes: Note[]): Track {
     soloed: false,
     armed: false,
     clips: [],
+    fx: defaultFx(),
     instrument: { sound, notes },
   };
 }

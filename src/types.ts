@@ -48,6 +48,18 @@ export interface Clip {
   peaks?: number[]; // downsampled waveform for drawing
 }
 
+// per-track insert effects
+export interface TrackFx {
+  reverb: number; // 0..1 wet send
+  eqLow: number; // dB -12..+12 (low shelf)
+  eqMid: number; // dB -12..+12 (mid peak)
+  eqHigh: number; // dB -12..+12 (high shelf)
+}
+
+export function defaultFx(): TrackFx {
+  return { reverb: 0, eqLow: 0, eqMid: 0, eqHigh: 0 };
+}
+
 export interface Track {
   id: string;
   name: string;
@@ -59,6 +71,7 @@ export interface Track {
   soloed: boolean;
   armed: boolean; // record-enabled
   clips: Clip[];
+  fx: TrackFx;
   instrument?: InstrumentConfig; // present on instrument tracks
 }
 

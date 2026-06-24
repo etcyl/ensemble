@@ -3,6 +3,8 @@ import { useStore, uid } from "./state/store";
 import { engine } from "./audio/AudioEngine";
 import { LiveRecorder, base64ToArrayBuffer, encodeWavBase64, computePeaks, downloadWav } from "./audio/Recorder";
 import { VoiceControl } from "./voice/VoiceControl";
+import { runCommand, registerRecorder, registerHarmonizeOpener, registerMixdown } from "./commands";
+import CommandBar from "./components/CommandBar";
 import Transport from "./components/Transport";
 import Arrange from "./components/Arrange";
 import DrumSequencer from "./components/DrumSequencer";
@@ -97,57 +99,64 @@ export default function App() {
     })();
   }, [projectId]);
 
-  const doRecord = async () => {
+  const beginRecording = async () => {
     const st = useStore.getState();
-    if (!st.recording) {
-      engine.resume();
-      recStart.current = st.playhead;
-      if (!st.playing) st.play();
-      try {
-        await recorder.current.start();
-        st.setRecording(true);
-      } catch (e) {
-        alert("Could not access the microphone. Check permissions.");
-      }
-    } else {
-      st.setRecording(false);
-      try {
-        const res = await recorder.current.stop(engine.ctx!);
-        const clip = {
-          id: uid(),
-          name: "Take",
-          start: recStart.current,
-          duration: res.duration,
-          audio: res.wavBase64,
-          peaks: res.peaks,
-        };
-        engine.setBuffer(clip.id, res.buffer);
-        st.addClipToArmed(clip);
-      } catch (e) {
-        console.warn("recording failed", e);
-      }
+    if (st.recording) return;
+    engine.resume();
+    recStart.current = st.playhead;
+    if (!st.playing) st.play();
+    try {
+      await recorder.current.start();
+      st.setRecording(true);
+    } catch (e) {
+      alert("Could not access the microphone. Check permissions.");
     }
   };
+  const endRecording = async () => {
+    const st = useStore.getState();
+    if (!st.recording) return;
+    st.setRecording(false);
+    try {
+      const res = await recorder.current.stop(engine.ctx!);
+      const clip = {
+        id: uid(),
+        name: "Take",
+        start: recStart.current,
+        duration: res.duration,
+        audio: res.wavBase64,
+        peaks: res.peaks,
+      };
+      engine.setBuffer(clip.id, res.buffer);
+      st.addClipToArmed(clip);
+    } catch (e) {
+      console.warn("recording failed", e);
+    }
+  };
+  const doRecord = () => (useStore.getState().recording ? endRecording() : beginRecording());
+
+  // run a typed or spoken command through the shared command layer
+  const dispatch = (text: string) => {
+    const r = runCommand(text);
+    useStore.getState().setFeedback(r.message);
+  };
+
+  // wire the command layer's bridges to the React-side handlers (once)
+  useEffect(() => {
+    registerRecorder({
+      start: beginRecording,
+      stop: endRecording,
+      isRecording: () => useStore.getState().recording,
+    });
+    registerHarmonizeOpener(() => setShowHarmonize(true));
+    registerMixdown(() => doMixdown());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const toggleVoice = () => {
     if (!voice.current) {
-      voice.current = new VoiceControl({
-        play: () => useStore.getState().play(),
-        stop: () => useStore.getState().stop(),
-        record: () => doRecord(),
-        addTrack: () => useStore.getState().addAudioTrack(),
-        setBpm: (n) => useStore.getState().setBpm(n),
-        metronome: (on) => {
-          if (useStore.getState().project.metronome !== on)
-            useStore.getState().toggleMetronome();
-        },
-        louder: () =>
-          useStore.getState().setMaster(Math.min(1.5, useStore.getState().project.master + 0.1)),
-        softer: () =>
-          useStore.getState().setMaster(Math.max(0, useStore.getState().project.master - 0.1)),
-        harmonize: () => setShowHarmonize(true),
-        mixdown: () => doMixdown(),
-        onHeard: (txt) => useStore.getState().setLastVoice(txt),
+      voice.current = new VoiceControl((text) => {
+        useStore.getState().setLastVoice(text);
+        dispatch(text);
       });
     }
     if (!voice.current.supported) {
@@ -232,6 +241,8 @@ export default function App() {
       </div>
 
       <Transport onRecord={doRecord} />
+
+      <CommandBar onRun={dispatch} />
 
       <div className="main">
         <Arrange />

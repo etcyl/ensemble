@@ -1,12 +1,30 @@
-import type { Project, DrumVoice } from "../types";
+import type { Project, DrumVoice, TrackFx } from "../types";
 import { playDrum } from "./DrumSynth";
 import { playNote } from "./InstrumentSynth";
 
 const DRUM_VOICES: DrumVoice[] = ["kick", "snare", "hat", "clap", "tom", "ride"];
 
 interface TrackNodes {
-  gain: GainNode;
+  gain: GainNode; // input + volume
+  low: BiquadFilterNode;
+  mid: BiquadFilterNode;
+  high: BiquadFilterNode;
+  dry: GainNode;
+  wet: GainNode; // reverb send level
+  conv: ConvolverNode;
   pan: StereoPannerNode;
+}
+
+// a decaying-noise impulse response for a simple, CPU-cheap reverb
+function makeImpulse(ctx: BaseAudioContext, seconds = 2.2, decay = 3): AudioBuffer {
+  const len = Math.floor(ctx.sampleRate * seconds);
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    for (let i = 0; i < len; i++)
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+  }
+  return buf;
 }
 
 type TickCb = (playhead: number, step: number) => void;
@@ -17,6 +35,7 @@ class AudioEngine {
   private analyser!: AnalyserNode;
   private trackNodes = new Map<string, TrackNodes>();
   private buffers = new Map<string, AudioBuffer>(); // clipId -> buffer
+  private impulse: AudioBuffer | null = null;
   private getProject: () => Project = () => {
     throw new Error("engine not wired");
   };
@@ -70,10 +89,22 @@ class AudioEngine {
   private nodes(trackId: string): TrackNodes {
     let n = this.trackNodes.get(trackId);
     if (!n) {
-      const gain = this.ctx!.createGain();
-      const pan = this.ctx!.createStereoPanner();
-      gain.connect(pan).connect(this.master);
-      n = { gain, pan };
+      const ctx = this.ctx!;
+      if (!this.impulse) this.impulse = makeImpulse(ctx);
+      const gain = ctx.createGain();
+      const low = ctx.createBiquadFilter(); low.type = "lowshelf"; low.frequency.value = 160;
+      const mid = ctx.createBiquadFilter(); mid.type = "peaking"; mid.frequency.value = 1000; mid.Q.value = 0.9;
+      const high = ctx.createBiquadFilter(); high.type = "highshelf"; high.frequency.value = 4500;
+      const dry = ctx.createGain();
+      const wet = ctx.createGain(); wet.gain.value = 0;
+      const conv = ctx.createConvolver(); conv.buffer = this.impulse;
+      const pan = ctx.createStereoPanner();
+      // input -> EQ -> [dry + reverb] -> pan -> master
+      gain.connect(low); low.connect(mid); mid.connect(high);
+      high.connect(dry); dry.connect(pan);
+      high.connect(conv); conv.connect(wet); wet.connect(pan);
+      pan.connect(this.master);
+      n = { gain, low, mid, high, dry, wet, conv, pan };
       this.trackNodes.set(trackId, n);
     }
     return n;
@@ -84,6 +115,16 @@ class AudioEngine {
     const n = this.nodes(trackId);
     n.gain.gain.value = audible ? volume : 0;
     n.pan.pan.value = pan;
+  }
+
+  applyTrackFx(trackId: string, fx: TrackFx) {
+    if (!this.ctx) return;
+    const n = this.nodes(trackId);
+    n.low.gain.value = fx.eqLow;
+    n.mid.gain.value = fx.eqMid;
+    n.high.gain.value = fx.eqHigh;
+    n.wet.gain.value = Math.min(0.9, fx.reverb);
+    n.dry.gain.value = 1 - Math.min(0.5, fx.reverb * 0.4);
   }
 
   // store decoded audio for a clip
@@ -279,15 +320,26 @@ class AudioEngine {
     master.gain.value = p.master;
     master.connect(octx.destination);
 
+    const impulse = makeImpulse(octx);
     const anySolo = p.tracks.some((t) => t.soloed);
     const gainFor = new Map<string, GainNode>();
     for (const t of p.tracks) {
+      const fx = t.fx ?? { reverb: 0, eqLow: 0, eqMid: 0, eqHigh: 0 };
       const g = octx.createGain();
+      const low = octx.createBiquadFilter(); low.type = "lowshelf"; low.frequency.value = 160; low.gain.value = fx.eqLow;
+      const mid = octx.createBiquadFilter(); mid.type = "peaking"; mid.frequency.value = 1000; mid.Q.value = 0.9; mid.gain.value = fx.eqMid;
+      const high = octx.createBiquadFilter(); high.type = "highshelf"; high.frequency.value = 4500; high.gain.value = fx.eqHigh;
+      const dry = octx.createGain(); dry.gain.value = 1 - Math.min(0.5, fx.reverb * 0.4);
+      const wet = octx.createGain(); wet.gain.value = Math.min(0.9, fx.reverb);
+      const conv = octx.createConvolver(); conv.buffer = impulse;
       const pan = octx.createStereoPanner();
       const audible = !t.muted && (!anySolo || t.soloed);
       g.gain.value = audible ? t.volume : 0;
       pan.pan.value = t.pan;
-      g.connect(pan).connect(master);
+      g.connect(low); low.connect(mid); mid.connect(high);
+      high.connect(dry); dry.connect(pan);
+      high.connect(conv); conv.connect(wet); wet.connect(pan);
+      pan.connect(master);
       gainFor.set(t.id, g);
     }
 

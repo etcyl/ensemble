@@ -7,6 +7,7 @@ export default function Mixer() {
   const master = useStore((s) => s.project.master);
   const setMaster = useStore((s) => s.setMaster);
   const updateTrack = useStore((s) => s.updateTrack);
+  const setTrackFx = useStore((s) => s.setTrackFx);
   const [level, setLevel] = useState(0);
   const raf = useRef(0);
 
@@ -63,6 +64,32 @@ export default function Mixer() {
               >
                 S
               </button>
+            </div>
+            <div className="fx" title="Per-channel effects: 3-band EQ and a reverb send. You can also set these by command, e.g. 'add reverb to channel 1' or 'cut the lows on channel 2'.">
+              <div className="fxrow">
+                <span>LO</span>
+                <input className="slider" type="range" min={-12} max={12} step={1} value={t.fx.eqLow}
+                  title={`EQ low shelf: ${t.fx.eqLow > 0 ? "+" : ""}${t.fx.eqLow} dB`}
+                  onChange={(e) => setTrackFx(t.id, { eqLow: +e.target.value })} />
+              </div>
+              <div className="fxrow">
+                <span>MID</span>
+                <input className="slider" type="range" min={-12} max={12} step={1} value={t.fx.eqMid}
+                  title={`EQ mid: ${t.fx.eqMid > 0 ? "+" : ""}${t.fx.eqMid} dB`}
+                  onChange={(e) => setTrackFx(t.id, { eqMid: +e.target.value })} />
+              </div>
+              <div className="fxrow">
+                <span>HI</span>
+                <input className="slider" type="range" min={-12} max={12} step={1} value={t.fx.eqHigh}
+                  title={`EQ high shelf: ${t.fx.eqHigh > 0 ? "+" : ""}${t.fx.eqHigh} dB`}
+                  onChange={(e) => setTrackFx(t.id, { eqHigh: +e.target.value })} />
+              </div>
+              <div className="fxrow rev">
+                <span>REV</span>
+                <input className="slider" type="range" min={0} max={1} step={0.02} value={t.fx.reverb}
+                  title={`Reverb send: ${Math.round(t.fx.reverb * 100)}%`}
+                  onChange={(e) => setTrackFx(t.id, { reverb: +e.target.value })} />
+              </div>
             </div>
           </div>
         ))}

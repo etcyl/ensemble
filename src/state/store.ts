@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { Project, Track, DrumVoice, DrumPattern } from "../types";
+import type { Project, Track, DrumVoice, DrumPattern, TrackFx } from "../types";
+import { defaultFx } from "../types";
 import { engine } from "../audio/AudioEngine";
 import { loadAutosave, saveAutosave } from "./persistence";
 import { DRUM_KITS, defaultSounds } from "../audio/DrumSynth";
@@ -63,6 +64,7 @@ export function newProject(name = "Untitled"): Project {
         soloed: false,
         armed: false,
         clips: [],
+        fx: defaultFx(),
       },
     ],
     updatedAt: Date.now(),
@@ -77,6 +79,7 @@ interface State {
   activeStep: number;
   voiceOn: boolean;
   lastVoice: string;
+  feedback: string;
 
   setProject: (p: Project) => void;
   rename: (name: string) => void;
@@ -89,6 +92,8 @@ interface State {
   addAudioTrack: () => void;
   removeTrack: (id: string) => void;
   updateTrack: (id: string, patch: Partial<Track>) => void;
+  setTrackFx: (id: string, patch: Partial<TrackFx>) => void;
+  clearTrackClips: (id: string) => void;
 
   toggleStep: (voice: DrumVoice, i: number) => void;
   setSwing: (v: number) => void;
@@ -107,6 +112,7 @@ interface State {
 
   setVoiceOn: (b: boolean) => void;
   setLastVoice: (s: string) => void;
+  setFeedback: (s: string) => void;
   addClipToArmed: (clip: Track["clips"][number]) => void;
   importTrack: (name: string, clip: Clip) => string;
 
@@ -118,6 +124,7 @@ function pushMixer(p: Project) {
   for (const t of p.tracks) {
     const audible = !t.muted && (!anySolo || t.soloed);
     engine.applyTrackParams(t.id, t.volume, t.pan, audible);
+    engine.applyTrackFx(t.id, t.fx ?? defaultFx());
   }
   engine.setMaster(p.master);
 }
@@ -130,6 +137,7 @@ function normalize(p: Project): Project {
   if (!p.harmonize) p.harmonize = defaultHarmonize();
   if (p.harmonize.style === undefined) p.harmonize.style = "pop";
   if (p.harmonize.addDrums === undefined) p.harmonize.addDrums = false;
+  for (const t of p.tracks) if (!t.fx) t.fx = defaultFx();
   return p;
 }
 
@@ -155,6 +163,7 @@ export const useStore = create<State>((set, get) => {
     activeStep: -1,
     voiceOn: false,
     lastVoice: "",
+    feedback: "",
 
     setProject: (raw) => {
       const p = normalize(raw);
@@ -183,6 +192,7 @@ export const useStore = create<State>((set, get) => {
         soloed: false,
         armed: p.tracks.every((x) => !x.armed),
         clips: [],
+        fx: defaultFx(),
       };
       commit({ ...p, tracks: [...p.tracks, t] });
     },
@@ -197,6 +207,25 @@ export const useStore = create<State>((set, get) => {
       // single record-arm
       if (patch.armed) tracks = tracks.map((t) => (t.id === id ? t : { ...t, armed: false }));
       commit({ ...p, tracks });
+    },
+
+    setTrackFx: (id, patch) => {
+      const p = get().project;
+      const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+      const tracks = p.tracks.map((t) => {
+        if (t.id !== id) return t;
+        const fx = { ...t.fx, ...patch };
+        fx.reverb = clamp(fx.reverb, 0, 1);
+        fx.eqLow = clamp(fx.eqLow, -12, 12);
+        fx.eqMid = clamp(fx.eqMid, -12, 12);
+        fx.eqHigh = clamp(fx.eqHigh, -12, 12);
+        return { ...t, fx };
+      });
+      commit({ ...p, tracks });
+    },
+    clearTrackClips: (id) => {
+      const p = get().project;
+      commit({ ...p, tracks: p.tracks.map((t) => (t.id === id ? { ...t, clips: [] } : t)) });
     },
 
     toggleStep: (voice, i) => {
@@ -262,6 +291,7 @@ export const useStore = create<State>((set, get) => {
 
     setVoiceOn: (b) => set({ voiceOn: b }),
     setLastVoice: (s) => set({ lastVoice: s }),
+    setFeedback: (s) => set({ feedback: s }),
 
     addClipToArmed: (clip) => {
       const p = get().project;
@@ -279,6 +309,7 @@ export const useStore = create<State>((set, get) => {
           soloed: false,
           armed: true,
           clips: [],
+          fx: defaultFx(),
         };
         tracks = [...tracks, target];
       }
@@ -301,6 +332,7 @@ export const useStore = create<State>((set, get) => {
         soloed: false,
         armed: false,
         clips: [clip],
+        fx: defaultFx(),
       };
       commit({ ...p, tracks: [...p.tracks, t] });
       return t.id;
