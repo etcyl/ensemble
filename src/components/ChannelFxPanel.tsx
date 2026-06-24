@@ -1,6 +1,7 @@
 import { useStore } from "../state/store";
 import { FX_RANGES, defaultFx } from "../types";
 import type { TrackFx } from "../types";
+import { DELAY_DIVISIONS, delaySeconds } from "../audio/timing";
 
 function Row({
   label, k, value, min, max, step, unit, fmt, onChange, title,
@@ -22,10 +23,11 @@ export default function ChannelFxPanel({ trackId, onClose }: { trackId: string; 
   const track = useStore((s) => s.project.tracks.find((t) => t.id === trackId));
   const setTrackFx = useStore((s) => s.setTrackFx);
   const idx = useStore((s) => s.project.tracks.findIndex((t) => t.id === trackId));
+  const bpm = useStore((s) => s.project.bpm);
   if (!track) return null;
   const fx = track.fx;
   const set = (k: keyof TrackFx, v: number) => setTrackFx(trackId, { [k]: v } as Partial<TrackFx>);
-  const R = FX_RANGES;
+  const R = FX_RANGES as Record<string, [number, number]>;
   const hz = (v: number) => (v >= 1000 ? (v / 1000).toFixed(1) + "k" : Math.round(v).toString());
   const db = (v: number) => (v > 0 ? "+" : "") + v;
   const pct = (v: number) => Math.round(v * 100) + "%";
@@ -50,7 +52,17 @@ export default function ChannelFxPanel({ trackId, onClose }: { trackId: string; 
 
         <h3 className="fxp-h">Delay</h3>
         <Row label="Amount" k="delay" value={fx.delay} min={R.delay[0]} max={R.delay[1]} step={0.02} fmt={pct} onChange={set} title="Echo send level" />
-        <Row label="Time" k="delayTime" value={fx.delayTime} min={R.delayTime[0]} max={R.delayTime[1]} step={0.01} fmt={(v) => Math.round(v * 1000) + ""} unit="ms" onChange={set} title="Delay time between echoes" />
+        <div className="fxp-row" title="Sync the delay time to the tempo (e.g. 1/8 note) so echoes lock to the groove. Choose Free to set the time in milliseconds.">
+          <span className="fxp-label">Sync</span>
+          <select className="fxp-select" value={fx.delaySync} title="Delay sync division"
+            onChange={(e) => setTrackFx(trackId, { delaySync: e.target.value })}>
+            {DELAY_DIVISIONS.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+          <span className="fxp-val">{Math.round(delaySeconds(bpm, fx.delaySync, fx.delayTime) * 1000)}ms</span>
+        </div>
+        {!fx.delaySync && (
+          <Row label="Time" k="delayTime" value={fx.delayTime} min={R.delayTime[0]} max={R.delayTime[1]} step={0.01} fmt={(v) => Math.round(v * 1000) + ""} unit="ms" onChange={set} title="Delay time between echoes (used when Sync is Free)" />
+        )}
         <Row label="Feedback" k="delayFeedback" value={fx.delayFeedback} min={R.delayFeedback[0]} max={R.delayFeedback[1]} step={0.02} fmt={pct} onChange={set} title="How much the echo repeats (higher = more repeats)" />
 
         <h3 className="fxp-h">Compression</h3>

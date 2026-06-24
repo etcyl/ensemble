@@ -2,7 +2,22 @@
 // the GUI buttons, which call the same store actions). Parsing is intentionally
 // forgiving: it looks for intent and a channel number, not exact phrasing.
 import { useStore } from "./state/store";
-import type { Track } from "./types";
+import type { Track, TrackFx } from "./types";
+
+// recognize a note division in spoken/typed text -> sync id, "" (free), or null
+function parseDivision(t: string): string | null {
+  if (/\b(unsync|un-sync|free|no sync|millisecond)\b/.test(t)) return "";
+  const dotted = /\bdotted\b/.test(t);
+  const triplet = /\btriplets?\b/.test(t);
+  const base = /\bquarter\b/.test(t) ? "1/4"
+    : /\b(eighth|8th)\b/.test(t) ? "1/8"
+    : /\b(sixteenth|16th)\b/.test(t) ? "1/16"
+    : /\bhalf\b/.test(t) ? "1/2" : null;
+  if (!base) return null;
+  if (triplet && base === "1/8") return "1/8t";
+  if (dotted) return base + ".";
+  return base;
+}
 
 export interface CommandResult { ok: boolean; message: string; }
 
@@ -112,17 +127,21 @@ export function runCommand(raw: string): CommandResult {
     return ok(`Reverb on ${chName(tr)}: ${Math.round(Math.max(0, Math.min(1, v)) * 100)}%.`);
   }
 
-  // --- delay / echo ---
+  // --- delay / echo (with optional tempo sync) ---
   if (/\bdelay\b|\becho\b/.test(t)) {
     const tr = targetTrack(t);
     if (!tr) return no("No channel for delay.");
-    let v = tr.fx.delay;
-    if (/\b(remove|no|kill|off|none)\b/.test(t)) v = 0;
-    else if (DOWN.test(t)) v = v - 0.15;
-    else if (/\bmore\b|increase/.test(t)) v = (v || 0.3) + 0.15;
-    else v = Math.max(v, 0.4);
-    S.setTrackFx(tr.id, { delay: v });
-    return ok(`Delay on ${chName(tr)}: ${Math.round(Math.max(0, Math.min(1, v)) * 100)}%.`);
+    const patch: Partial<TrackFx> = {};
+    const div = parseDivision(t);
+    if (div !== null) { patch.delaySync = div; if (div) patch.delay = Math.max(tr.fx.delay, 0.4); }
+    if (/\b(remove|no|kill|off|none)\b/.test(t)) patch.delay = 0;
+    else if (DOWN.test(t)) patch.delay = tr.fx.delay - 0.15;
+    else if (/\bmore\b|increase/.test(t)) patch.delay = (tr.fx.delay || 0.3) + 0.15;
+    else if (div === null) patch.delay = Math.max(tr.fx.delay, 0.4);
+    S.setTrackFx(tr.id, patch);
+    const amt = patch.delay ?? tr.fx.delay;
+    const sync = patch.delaySync ?? tr.fx.delaySync;
+    return ok(`Delay on ${chName(tr)}: ${Math.round(Math.max(0, Math.min(1, amt)) * 100)}%${sync ? ` synced to ${sync}` : ""}.`);
   }
 
   // --- compression ---

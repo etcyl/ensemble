@@ -2,6 +2,7 @@ import type { Project, DrumVoice, TrackFx } from "../types";
 import { defaultFx } from "../types";
 import { playDrum } from "./DrumSynth";
 import { playNote } from "./InstrumentSynth";
+import { delaySeconds } from "./timing";
 
 const DRUM_VOICES: DrumVoice[] = ["kick", "snare", "hat", "clap", "tom", "ride"];
 
@@ -45,7 +46,7 @@ function buildTrackChain(ctx: BaseAudioContext, master: AudioNode, impulse: Audi
   return { gain, low, mid, high, comp, dry, wet, conv, delayNode, delayWet, delayFb, pan };
 }
 
-function applyFxToNodes(n: TrackNodes, fx: TrackFx) {
+function applyFxToNodes(n: TrackNodes, fx: TrackFx, bpm: number) {
   n.low.frequency.value = fx.eqLowFreq; n.low.gain.value = fx.eqLow;
   n.mid.frequency.value = fx.eqMidFreq; n.mid.Q.value = fx.eqMidQ; n.mid.gain.value = fx.eqMid;
   n.high.frequency.value = fx.eqHighFreq; n.high.gain.value = fx.eqHigh;
@@ -57,7 +58,7 @@ function applyFxToNodes(n: TrackNodes, fx: TrackFx) {
   n.comp.release.value = 0.2;
   n.wet.gain.value = Math.min(0.9, fx.reverb);
   n.delayWet.gain.value = Math.min(0.9, fx.delay);
-  n.delayNode.delayTime.value = fx.delayTime;
+  n.delayNode.delayTime.value = delaySeconds(bpm, fx.delaySync, fx.delayTime);
   n.delayFb.gain.value = Math.min(0.9, fx.delayFeedback);
   // keep dry mostly full; trim a touch as sends rise
   n.dry.gain.value = 1 - Math.min(0.4, (fx.reverb + fx.delay) * 0.2);
@@ -153,7 +154,7 @@ class AudioEngine {
 
   applyTrackFx(trackId: string, fx: TrackFx) {
     if (!this.ctx) return;
-    applyFxToNodes(this.nodes(trackId), fx);
+    applyFxToNodes(this.nodes(trackId), fx, this.getProject().bpm);
   }
 
   // store decoded audio for a clip
@@ -354,7 +355,7 @@ class AudioEngine {
     const gainFor = new Map<string, GainNode>();
     for (const t of p.tracks) {
       const n = buildTrackChain(octx, master, impulse);
-      applyFxToNodes(n, t.fx ?? defaultFx());
+      applyFxToNodes(n, t.fx ?? defaultFx(), p.bpm);
       const audible = !t.muted && (!anySolo || t.soloed);
       n.gain.gain.value = audible ? t.volume : 0;
       n.pan.pan.value = t.pan;

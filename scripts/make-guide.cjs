@@ -223,7 +223,7 @@ p("The full rack adds:");
 bullets([
   "Sweepable EQ: set the frequency of each band and the width (Q) of the mid band, so you can hunt for a specific tone rather than fixed bands.",
   "Reverb: send amount.",
-  "Delay (echo): amount, time between echoes, and feedback (how many repeats).",
+  "Delay (echo): amount, feedback (how many repeats), and a Sync setting that locks the echo time to the tempo - 1/4, 1/8, dotted or triplet - or Free to dial milliseconds by hand.",
   "Compression: evens out the level and adds punch - higher amount = more squash.",
 ]);
 p("You do not have to touch any of it by hand. Everything here can be driven by a typed or spoken command - see section 10 - for example \"add reverb to channel 1\", \"add delay to channel 2\", \"compress channel 1\", or \"cut the lows on channel 2\". All effects are baked into the exported mixdown.");
@@ -300,6 +300,7 @@ table(
     ["mute / solo channel N", "\"mute channel 3\"", "Mutes, unmutes or solos a channel."],
     ["add reverb to channel N", "\"more reverb on 1\", \"remove reverb\"", "Sets the channel's reverb send (add / more / less / remove)."],
     ["add delay to channel N", "\"more delay on 2\", \"remove delay\"", "Sets the channel's delay/echo send."],
+    ["sync delay to a note", "\"delay in eighth notes on 1\", \"dotted eighth delay\", \"free delay\"", "Locks the echo time to the tempo (quarter / eighth / sixteenth, dotted or triplet)."],
     ["compress channel N", "\"more compression on 1\"", "Sets the channel's compression amount."],
     ["EQ a channel", "\"bring up the highs on channel 2\", \"cut the lows on 1\"", "Boosts or cuts the low / mid / high band on that channel."],
     ["louder / softer channel N", "\"turn up channel 2\"", "Channel volume (or master, if no channel is named)."],

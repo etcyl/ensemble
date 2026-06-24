@@ -62,7 +62,8 @@ export interface TrackFx {
   reverb: number; // 0..1
   // delay / echo
   delay: number; // 0..1 wet
-  delayTime: number; // seconds
+  delayTime: number; // seconds (used when delaySync is "")
+  delaySync: string; // "" = free, else a note division like "1/8", "1/8."
   delayFeedback: number; // 0..0.9
   // compression
   comp: number; // 0..1 amount
@@ -74,13 +75,13 @@ export function defaultFx(): TrackFx {
     eqMid: 0, eqMidFreq: 1000, eqMidQ: 0.9,
     eqHigh: 0, eqHighFreq: 4500,
     reverb: 0,
-    delay: 0, delayTime: 0.3, delayFeedback: 0.35,
+    delay: 0, delayTime: 0.3, delaySync: "", delayFeedback: 0.35,
     comp: 0,
   };
 }
 
-// per-field clamp ranges, shared by the store and UI
-export const FX_RANGES: Record<keyof TrackFx, [number, number]> = {
+// per-field clamp ranges for the numeric fx fields, shared by the store and UI
+export const FX_RANGES: Partial<Record<keyof TrackFx, [number, number]>> = {
   eqLow: [-12, 12], eqLowFreq: [40, 500],
   eqMid: [-12, 12], eqMidFreq: [200, 6000], eqMidQ: [0.3, 8],
   eqHigh: [-12, 12], eqHighFreq: [1500, 12000],

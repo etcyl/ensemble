@@ -220,8 +220,8 @@ export const useStore = create<State>((set, get) => {
         const fx = { ...t.fx, ...patch };
         for (const k in FX_RANGES) {
           const key = k as keyof TrackFx;
-          const [lo, hi] = FX_RANGES[key];
-          fx[key] = clamp(fx[key], lo, hi);
+          const range = FX_RANGES[key];
+          if (range) (fx as any)[key] = clamp((fx as any)[key], range[0], range[1]);
         }
         return { ...t, fx };
       });

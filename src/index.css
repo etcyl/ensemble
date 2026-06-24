@@ -275,6 +275,9 @@ select.voicepick option, select.kit-select option { background: var(--ink-800); 
 .fxp-label { font-size: 11px; color: var(--text-dim); }
 .fxp-val { font-size: 11px; color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
 .fxp-row .slider { width: 100%; }
+.fxp-select { background: var(--ink-900); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: 12px; font-family: inherit; cursor: pointer; width: 100%; }
+.fxp-select:focus { outline: none; border-color: var(--amber); }
+.fxp-select option { background: var(--ink-800); }
 .strip.master { background: linear-gradient(180deg, var(--ink-600), var(--ink-700)); border-color: var(--mustard); }
 .meter { width: 7px; flex: 1; background: var(--ink-900); border-radius: 4px; overflow: hidden; position: relative; }
 .meter .fill { position: absolute; bottom: 0; left: 0; right: 0;
