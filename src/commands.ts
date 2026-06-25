@@ -31,6 +31,8 @@ let openHarmonize: () => void = () => {};
 export function registerHarmonizeOpener(fn: () => void) { openHarmonize = fn; }
 let runMixdown: () => void = () => {};
 export function registerMixdown(fn: () => void) { runMixdown = fn; }
+let runStems: () => void = () => {};
+export function registerStems(fn: () => void) { runStems = fn; }
 
 const NUM_WORDS: Record<string, number> = {
   one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8,
@@ -78,6 +80,16 @@ function band(t: string): "eqLow" | "eqMid" | "eqHigh" | null {
 const UP = /\b(up|more|boost|raise|increase|add|higher|brighten)\b/;
 const DOWN = /\b(down|less|cut|lower|reduce|drop|darken)\b/;
 
+// resolve which effects target a command refers to: a channel or the master bus
+function resolveFx(t: string): { fx: TrackFx; set: (p: Partial<TrackFx>) => void; name: string } | null {
+  const S = useStore.getState();
+  if (/\bmaster|master bus|main mix|the mix\b/.test(t))
+    return { fx: S.project.masterFx, set: S.setMasterFx, name: "the master" };
+  const tr = targetTrack(t);
+  if (!tr) return null;
+  return { fx: tr.fx, set: (p) => S.setTrackFx(tr.id, p), name: chName(tr) };
+}
+
 export function runCommand(raw: string): CommandResult {
   const t = raw.toLowerCase().trim();
   if (!t) return { ok: false, message: "" };
@@ -106,6 +118,30 @@ export function runCommand(raw: string): CommandResult {
     return no("Which channel? Try \"set channel 1 to playback\".");
   }
 
+  // --- editing / history / view ---
+  if (/\bundo\b/.test(t)) { S.undo(); return ok("Undone."); }
+  if (/\bredo\b/.test(t)) { S.redo(); return ok("Redone."); }
+  if (/\bduplicate\b|\bcopy clip\b/.test(t)) return S.duplicateSelected() ? ok("Duplicated the clip.") : no("Select a clip first.");
+  if (/\bsplit\b/.test(t)) return S.splitAtPlayhead() ? ok("Split the clip at the playhead.") : no("Put the playhead inside a selected clip, then split.");
+  if (/\b(delete|remove)\b.*\bclip\b|\bdelete selection\b/.test(t)) return S.deleteSelected() ? ok("Deleted the clip.") : no("Select a clip first.");
+  if (/\bsnap\b/.test(t)) {
+    const on = /\bon\b/.test(t), off = /\boff\b/.test(t);
+    if ((on && !S.project.snap) || (off && S.project.snap) || (!on && !off)) S.toggleSnap();
+    return ok(`Snap ${useStore.getState().project.snap ? "on" : "off"}.`);
+  }
+  if (/\bzoom\b/.test(t)) { const out = /\bout\b/.test(t); out ? S.zoomOut() : S.zoomIn(); return ok(`Zoomed ${out ? "out" : "in"}.`); }
+  if (/count[- ]?in/.test(t)) {
+    const on = /\bon\b/.test(t), off = /\boff\b/.test(t);
+    if ((on && !S.project.countIn) || (off && S.project.countIn) || (!on && !off)) S.toggleCountIn();
+    return ok(`Count-in ${useStore.getState().project.countIn ? "on" : "off"}.`);
+  }
+  if (/(clear|remove|no)\b.*\b(loop|cycle)\b/.test(t)) { S.setLoopRegion(null, null); return ok("Loop region cleared."); }
+  if (/\b(move|reorder)\b.*\b(up|down)\b/.test(t)) {
+    const tr = channelTrack(t);
+    if (tr) { const dir = /\bup\b/.test(t) ? -1 : 1; return S.moveTrack(tr.id, dir) ? ok(`Moved ${chName(tr)} ${dir < 0 ? "up" : "down"}.`) : no("Can't move further."); }
+  }
+  if (/\bstems\b|stem export|export tracks|bounce tracks/.test(t)) { runStems(); return ok("Exporting stems..."); }
+
   // --- erase / clear ---
   if (/\b(erase|clear|wipe|delete)\b/.test(t)) {
     if (/\b(beat|pattern|drums?)\b/.test(t)) { S.clearDrum(); return ok("Cleared the beat."); }
@@ -114,59 +150,59 @@ export function runCommand(raw: string): CommandResult {
     return no("Which channel to erase? Try \"erase channel 2\".");
   }
 
-  // --- reverb ---
+  // --- reverb (channel or master) ---
   if (/\breverb\b|\bverb\b/.test(t)) {
-    const tr = targetTrack(t);
-    if (!tr) return no("No channel to add reverb to.");
-    let v = tr.fx.reverb;
+    const tg = resolveFx(t);
+    if (!tg) return no("No channel to add reverb to.");
+    let v = tg.fx.reverb;
     if (/\b(remove|no|kill|off|none|dry)\b/.test(t)) v = 0;
     else if (DOWN.test(t)) v = v - 0.15;
     else if (/\bmore\b|increase|wetter/.test(t)) v = (v || 0.3) + 0.15;
     else v = Math.max(v, 0.4);
-    S.setTrackFx(tr.id, { reverb: v });
-    return ok(`Reverb on ${chName(tr)}: ${Math.round(Math.max(0, Math.min(1, v)) * 100)}%.`);
+    tg.set({ reverb: v });
+    return ok(`Reverb on ${tg.name}: ${Math.round(Math.max(0, Math.min(1, v)) * 100)}%.`);
   }
 
   // --- delay / echo (with optional tempo sync) ---
   if (/\bdelay\b|\becho\b/.test(t)) {
-    const tr = targetTrack(t);
-    if (!tr) return no("No channel for delay.");
+    const tg = resolveFx(t);
+    if (!tg) return no("No channel for delay.");
     const patch: Partial<TrackFx> = {};
     const div = parseDivision(t);
-    if (div !== null) { patch.delaySync = div; if (div) patch.delay = Math.max(tr.fx.delay, 0.4); }
+    if (div !== null) { patch.delaySync = div; if (div) patch.delay = Math.max(tg.fx.delay, 0.4); }
     if (/\b(remove|no|kill|off|none)\b/.test(t)) patch.delay = 0;
-    else if (DOWN.test(t)) patch.delay = tr.fx.delay - 0.15;
-    else if (/\bmore\b|increase/.test(t)) patch.delay = (tr.fx.delay || 0.3) + 0.15;
-    else if (div === null) patch.delay = Math.max(tr.fx.delay, 0.4);
-    S.setTrackFx(tr.id, patch);
-    const amt = patch.delay ?? tr.fx.delay;
-    const sync = patch.delaySync ?? tr.fx.delaySync;
-    return ok(`Delay on ${chName(tr)}: ${Math.round(Math.max(0, Math.min(1, amt)) * 100)}%${sync ? ` synced to ${sync}` : ""}.`);
+    else if (DOWN.test(t)) patch.delay = tg.fx.delay - 0.15;
+    else if (/\bmore\b|increase/.test(t)) patch.delay = (tg.fx.delay || 0.3) + 0.15;
+    else if (div === null) patch.delay = Math.max(tg.fx.delay, 0.4);
+    tg.set(patch);
+    const amt = patch.delay ?? tg.fx.delay;
+    const sync = patch.delaySync ?? tg.fx.delaySync;
+    return ok(`Delay on ${tg.name}: ${Math.round(Math.max(0, Math.min(1, amt)) * 100)}%${sync ? ` synced to ${sync}` : ""}.`);
   }
 
   // --- compression ---
-  if (/\bcompress|compression\b|\bcomp\b/.test(t)) {
-    const tr = targetTrack(t);
-    if (!tr) return no("No channel to compress.");
-    let v = tr.fx.comp;
+  if (/\bcompress|compression\b|\bcomp\b|limiter/.test(t)) {
+    const tg = resolveFx(t);
+    if (!tg) return no("No channel to compress.");
+    let v = tg.fx.comp;
     if (/\b(remove|no|kill|off|none)\b/.test(t)) v = 0;
     else if (DOWN.test(t)) v = v - 0.2;
     else if (/\bmore\b|increase|harder/.test(t)) v = (v || 0.3) + 0.2;
     else v = Math.max(v, 0.5);
-    S.setTrackFx(tr.id, { comp: v });
-    return ok(`Compression on ${chName(tr)}: ${Math.round(Math.max(0, Math.min(1, v)) * 100)}%.`);
+    tg.set({ comp: v });
+    return ok(`Compression on ${tg.name}: ${Math.round(Math.max(0, Math.min(1, v)) * 100)}%.`);
   }
 
   // --- EQ ---
   if (/\beq\b|equaliz/.test(t) || (band(t) && (UP.test(t) || DOWN.test(t)))) {
-    const tr = targetTrack(t);
-    if (!tr) return no("No channel to EQ.");
+    const tg = resolveFx(t);
+    if (!tg) return no("No channel to EQ.");
     const b = band(t) ?? "eqMid";
     const dir = DOWN.test(t) && !UP.test(t) ? -3 : 3;
-    const next = tr.fx[b] + dir;
-    S.setTrackFx(tr.id, { [b]: next } as any);
+    const next = tg.fx[b] + dir;
+    tg.set({ [b]: next } as Partial<TrackFx>);
     const label = b === "eqLow" ? "lows" : b === "eqMid" ? "mids" : "highs";
-    return ok(`${dir > 0 ? "Boosted" : "Cut"} ${label} on ${chName(tr)} (${next > 0 ? "+" : ""}${next} dB).`);
+    return ok(`${dir > 0 ? "Boosted" : "Cut"} ${label} on ${tg.name} (${next > 0 ? "+" : ""}${next} dB).`);
   }
 
   // --- mute / solo ---
@@ -247,6 +283,15 @@ export function suggest(raw: string): string[] {
     { k: /metro|click|beat keeper/, s: `metronome off` },
     { k: /harmon|accompan|instrument|drums|bass|keys/, s: `harmonize` },
     { k: /export|bounce|mixdown|render|wav|save audio/, s: `export` },
+    { k: /stem|separate track/, s: `export stems` },
+    { k: /undo|mistake|revert/, s: `undo` },
+    { k: /redo/, s: `redo` },
+    { k: /split|cut clip|slice/, s: `split clip` },
+    { k: /duplicate|copy/, s: `duplicate clip` },
+    { k: /snap|grid|quantize/, s: `snap on` },
+    { k: /zoom|bigger|smaller|closer/, s: `zoom in` },
+    { k: /count.?in|pre.?roll/, s: `count in on` },
+    { k: /loop|cycle/, s: `clear loop` },
   ];
   const hits = pool.filter((p) => p.k.test(t)).map((p) => p.s);
   if (hits.length) return Array.from(new Set(hits)).slice(0, 4);

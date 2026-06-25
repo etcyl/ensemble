@@ -19,14 +19,20 @@ function Row({
   );
 }
 
-export default function ChannelFxPanel({ trackId, onClose }: { trackId: string; onClose: () => void }) {
+export default function ChannelFxPanel({ trackId, master, onClose }: { trackId?: string; master?: boolean; onClose: () => void }) {
   const track = useStore((s) => s.project.tracks.find((t) => t.id === trackId));
+  const masterFx = useStore((s) => s.project.masterFx);
   const setTrackFx = useStore((s) => s.setTrackFx);
+  const setMasterFx = useStore((s) => s.setMasterFx);
   const idx = useStore((s) => s.project.tracks.findIndex((t) => t.id === trackId));
   const bpm = useStore((s) => s.project.bpm);
-  if (!track) return null;
-  const fx = track.fx;
-  const set = (k: keyof TrackFx, v: number) => setTrackFx(trackId, { [k]: v } as Partial<TrackFx>);
+  if (!master && !track) return null;
+  const fx = master ? masterFx : track!.fx;
+  const set = (k: keyof TrackFx, v: number) =>
+    master ? setMasterFx({ [k]: v } as Partial<TrackFx>) : setTrackFx(trackId!, { [k]: v } as Partial<TrackFx>);
+  const title = master ? "Master FX" : `Channel ${idx + 1}`;
+  const subtitle = master ? "the whole mix" : track!.name;
+  const subColor = master ? "var(--amber)" : track!.color;
   const R = FX_RANGES as Record<string, [number, number]>;
   const hz = (v: number) => (v >= 1000 ? (v / 1000).toFixed(1) + "k" : Math.round(v).toString());
   const db = (v: number) => (v > 0 ? "+" : "") + v;
@@ -35,7 +41,7 @@ export default function ChannelFxPanel({ trackId, onClose }: { trackId: string; 
   return (
     <div className="overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()} style={{ width: 480 }}>
-        <h2>Channel {idx + 1} FX <span style={{ color: track.color }}>· {track.name}</span></h2>
+        <h2>{title} FX <span style={{ color: subColor }}>· {subtitle}</span></h2>
         <p>Sweepable EQ, reverb, delay and compression for this channel. Baked into the exported mix.</p>
 
         <h3 className="fxp-h">Equalizer</h3>
@@ -55,7 +61,7 @@ export default function ChannelFxPanel({ trackId, onClose }: { trackId: string; 
         <div className="fxp-row" title="Sync the delay time to the tempo (e.g. 1/8 note) so echoes lock to the groove. Choose Free to set the time in milliseconds.">
           <span className="fxp-label">Sync</span>
           <select className="fxp-select" value={fx.delaySync} title="Delay sync division"
-            onChange={(e) => setTrackFx(trackId, { delaySync: e.target.value })}>
+            onChange={(e) => (master ? setMasterFx({ delaySync: e.target.value }) : setTrackFx(trackId!, { delaySync: e.target.value }))}>
             {DELAY_DIVISIONS.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
           <span className="fxp-val">{Math.round(delaySeconds(bpm, fx.delaySync, fx.delayTime) * 1000)}ms</span>
@@ -69,7 +75,7 @@ export default function ChannelFxPanel({ trackId, onClose }: { trackId: string; 
         <Row label="Amount" k="comp" value={fx.comp} min={R.comp[0]} max={R.comp[1]} step={0.02} fmt={pct} onChange={set} title="Evens out the level: higher = more squash and punch" />
 
         <div className="modal-actions">
-          <button className="btn ghost danger" onClick={() => setTrackFx(trackId, defaultFx())} title="Reset all effects on this channel">Reset</button>
+          <button className="btn ghost danger" onClick={() => (master ? setMasterFx(defaultFx()) : setTrackFx(trackId!, defaultFx()))} title="Reset all effects">Reset</button>
           <button className="btn accent" onClick={onClose}>Done</button>
         </div>
       </div>

@@ -5,7 +5,20 @@ import { engine } from "../audio/AudioEngine";
 import { loadAutosave, saveAutosave } from "./persistence";
 import { DRUM_KITS, defaultSounds } from "../audio/DrumSynth";
 import { defaultHarmonize, generateHarmony, generateBeat, STYLES } from "../audio/music";
-import type { HarmonizeSettings, Clip } from "../types";
+import type { HarmonizeSettings, Clip, Note } from "../types";
+
+// grid + snap helpers (used by the arrange view and clip editing)
+export function gridSeconds(p: Project): number {
+  const bar = (60 / p.bpm) * 4;
+  if (p.grid === "1") return bar;
+  const m = p.grid.match(/^1\/(\d+)$/);
+  return bar / (m ? parseInt(m[1], 10) : 4);
+}
+export function snapSec(p: Project, sec: number): number {
+  if (!p.snap) return Math.max(0, sec);
+  const g = gridSeconds(p);
+  return Math.max(0, Math.round(sec / g) * g);
+}
 
 const PALETTE = ["#e8b04b", "#d98b6f", "#7fae9c", "#b07fb0", "#6f93d9", "#c9805a"];
 let colorIdx = 0;
@@ -52,6 +65,13 @@ export function newProject(name = "Untitled"): Project {
     drum: fourOnFloor(),
     drumTrackId: drumId,
     harmonize: defaultHarmonize(),
+    masterFx: defaultFx(),
+    snap: true,
+    grid: "1/4",
+    zoom: 80,
+    loopStart: null,
+    loopEnd: null,
+    countIn: false,
     tracks: [
       {
         id: drumId,
@@ -118,6 +138,33 @@ interface State {
   addClipToArmed: (clip: Track["clips"][number]) => void;
   importTrack: (name: string, clip: Clip) => string;
 
+  // editing / view
+  selectedClip: { trackId: string; clipId: string } | null;
+  canUndo: boolean;
+  canRedo: boolean;
+  selectClip: (trackId: string | null, clipId?: string | null) => void;
+  moveClip: (trackId: string, clipId: string, newStart: number) => void;
+  trimClip: (trackId: string, clipId: string, start: number, duration: number, offset: number) => void;
+  splitAtPlayhead: () => boolean;
+  duplicateSelected: () => boolean;
+  deleteSelected: () => boolean;
+  moveTrack: (id: string, dir: -1 | 1) => boolean;
+  setInstrumentNotes: (trackId: string, notes: Note[]) => void;
+  setInstrumentSound: (trackId: string, sound: string) => void;
+  addInstrumentTrack: (sound: string, name: string) => string;
+
+  toggleSnap: () => void;
+  setGrid: (g: string) => void;
+  setZoom: (px: number) => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
+  setLoopRegion: (start: number | null, end: number | null) => void;
+  toggleCountIn: () => void;
+  setMasterFx: (patch: Partial<TrackFx>) => void;
+
+  undo: () => void;
+  redo: () => void;
+
   _tick: (playhead: number, step: number) => void;
 }
 
@@ -129,6 +176,7 @@ function pushMixer(p: Project) {
     engine.applyTrackFx(t.id, t.fx ?? defaultFx());
   }
   engine.setMaster(p.master);
+  engine.applyMasterFx(p.masterFx ?? defaultFx());
 }
 
 // fill in fields added after a project was first saved
@@ -140,6 +188,13 @@ function normalize(p: Project): Project {
   if (p.harmonize.style === undefined) p.harmonize.style = "pop";
   if (p.harmonize.addDrums === undefined) p.harmonize.addDrums = false;
   for (const t of p.tracks) t.fx = { ...defaultFx(), ...(t.fx ?? {}) };
+  if (!p.masterFx) p.masterFx = defaultFx(); else p.masterFx = { ...defaultFx(), ...p.masterFx };
+  if (p.snap === undefined) p.snap = true;
+  if (!p.grid) p.grid = "1/4";
+  if (!p.zoom) p.zoom = 80;
+  if (p.loopStart === undefined) p.loopStart = null;
+  if (p.loopEnd === undefined) p.loopEnd = null;
+  if (p.countIn === undefined) p.countIn = false;
   return p;
 }
 
@@ -150,14 +205,38 @@ function debouncedAutosave(p: Project) {
 }
 
 export const useStore = create<State>((set, get) => {
-  const commit = (project: Project) => {
-    project.updatedAt = Date.now();
-    set({ project });
+  // undo/redo history (coalesces rapid edits within a gesture into one step)
+  let past: Project[] = [];
+  let future: Project[] = [];
+  let lastCommitAt = 0;
+
+  const commit = (project: Project, opts?: { history?: boolean }) => {
+    const now = Date.now();
+    if (opts?.history !== false) {
+      if (now - lastCommitAt > 600) {
+        past.push(get().project);
+        if (past.length > 60) past.shift();
+        future = [];
+      }
+      lastCommitAt = now;
+    }
+    project.updatedAt = now;
+    set({ project, canUndo: past.length > 0, canRedo: future.length > 0 });
     debouncedAutosave(project); // localStorage write is debounced; audio stays immediate
     pushMixer(project);
   };
 
+  const restore = (project: Project) => {
+    set({ project, canUndo: past.length > 0, canRedo: future.length > 0 });
+    saveAutosave(project);
+    pushMixer(project);
+    lastCommitAt = 0;
+  };
+
   return {
+    selectedClip: null,
+    canUndo: false,
+    canRedo: false,
     project: normalize(loadAutosave() ?? newProject()),
     playing: false,
     recording: false,
@@ -341,6 +420,139 @@ export const useStore = create<State>((set, get) => {
       };
       commit({ ...p, tracks: [...p.tracks, t] });
       return t.id;
+    },
+
+    // ---- clip editing ----
+    selectClip: (trackId, clipId = null) =>
+      set({ selectedClip: trackId && clipId ? { trackId, clipId } : null }),
+
+    moveClip: (trackId, clipId, newStart) => {
+      const p = get().project;
+      const start = snapSec(p, newStart);
+      commit({
+        ...p,
+        tracks: p.tracks.map((t) =>
+          t.id === trackId ? { ...t, clips: t.clips.map((c) => (c.id === clipId ? { ...c, start } : c)) } : t
+        ),
+      });
+    },
+    trimClip: (trackId, clipId, start, duration, offset) => {
+      const p = get().project;
+      commit({
+        ...p,
+        tracks: p.tracks.map((t) =>
+          t.id === trackId
+            ? { ...t, clips: t.clips.map((c) => (c.id === clipId ? { ...c, start: Math.max(0, start), duration: Math.max(0.05, duration), offset: Math.max(0, offset) } : c)) }
+            : t
+        ),
+      });
+    },
+    splitAtPlayhead: () => {
+      const p = get().project;
+      const sel = get().selectedClip;
+      if (!sel) return false;
+      const ph = get().playhead;
+      const t = p.tracks.find((x) => x.id === sel.trackId);
+      const c = t?.clips.find((x) => x.id === sel.clipId);
+      if (!t || !c || ph <= c.start + 0.02 || ph >= c.start + c.duration - 0.02) return false;
+      const leftDur = ph - c.start;
+      const left: Clip = { ...c, duration: leftDur };
+      const right: Clip = { ...c, id: uid(), start: ph, duration: c.duration - leftDur, offset: (c.offset ?? 0) + leftDur };
+      if (engine.getBuffer(c.id)) engine.setBuffer(right.id, engine.getBuffer(c.id)!);
+      commit({
+        ...p,
+        tracks: p.tracks.map((x) => (x.id === t.id ? { ...x, clips: x.clips.flatMap((cc) => (cc.id === c.id ? [left, right] : [cc])) } : x)),
+      });
+      return true;
+    },
+    duplicateSelected: () => {
+      const p = get().project;
+      const sel = get().selectedClip;
+      if (!sel) return false;
+      const t = p.tracks.find((x) => x.id === sel.trackId);
+      const c = t?.clips.find((x) => x.id === sel.clipId);
+      if (!t || !c) return false;
+      const copy: Clip = { ...c, id: uid(), start: c.start + c.duration };
+      if (engine.getBuffer(c.id)) engine.setBuffer(copy.id, engine.getBuffer(c.id)!);
+      commit({ ...p, tracks: p.tracks.map((x) => (x.id === t.id ? { ...x, clips: [...x.clips, copy] } : x)) });
+      set({ selectedClip: { trackId: t.id, clipId: copy.id } });
+      return true;
+    },
+    deleteSelected: () => {
+      const p = get().project;
+      const sel = get().selectedClip;
+      if (!sel) return false;
+      const t = p.tracks.find((x) => x.id === sel.trackId);
+      if (!t || !t.clips.some((c) => c.id === sel.clipId)) return false;
+      commit({ ...p, tracks: p.tracks.map((x) => (x.id === t.id ? { ...x, clips: x.clips.filter((c) => c.id !== sel.clipId) } : x)) });
+      set({ selectedClip: null });
+      return true;
+    },
+    moveTrack: (id, dir) => {
+      const p = get().project;
+      const i = p.tracks.findIndex((t) => t.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= p.tracks.length) return false;
+      const tracks = [...p.tracks];
+      [tracks[i], tracks[j]] = [tracks[j], tracks[i]];
+      commit({ ...p, tracks });
+      return true;
+    },
+    setInstrumentNotes: (trackId, notes) => {
+      const p = get().project;
+      commit({
+        ...p,
+        tracks: p.tracks.map((t) => (t.id === trackId && t.instrument ? { ...t, instrument: { ...t.instrument, notes } } : t)),
+      });
+    },
+    setInstrumentSound: (trackId, sound) => {
+      const p = get().project;
+      commit({
+        ...p,
+        tracks: p.tracks.map((t) => (t.id === trackId && t.instrument ? { ...t, instrument: { ...t.instrument, sound } } : t)),
+      });
+    },
+    addInstrumentTrack: (sound, name) => {
+      const p = get().project;
+      const t: Track = {
+        id: uid(), name, type: "instrument", color: nextColor(),
+        volume: 0.8, pan: 0, muted: false, soloed: false, armed: false,
+        clips: [], fx: defaultFx(), instrument: { sound, notes: [] },
+      };
+      commit({ ...p, tracks: [...p.tracks, t] });
+      return t.id;
+    },
+
+    // ---- view / transport options ----
+    toggleSnap: () => commit({ ...get().project, snap: !get().project.snap }, { history: false }),
+    setGrid: (g) => commit({ ...get().project, grid: g }, { history: false }),
+    setZoom: (px) => commit({ ...get().project, zoom: Math.max(24, Math.min(320, px)) }, { history: false }),
+    zoomIn: () => commit({ ...get().project, zoom: Math.min(320, get().project.zoom * 1.3) }, { history: false }),
+    zoomOut: () => commit({ ...get().project, zoom: Math.max(24, get().project.zoom / 1.3) }, { history: false }),
+    setLoopRegion: (start, end) =>
+      commit({ ...get().project, loopStart: start, loopEnd: end, loop: start != null }, { history: false }),
+    toggleCountIn: () => commit({ ...get().project, countIn: !get().project.countIn }, { history: false }),
+    setMasterFx: (patch) => {
+      const p = get().project;
+      const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+      const fx = { ...p.masterFx, ...patch };
+      for (const k in FX_RANGES) {
+        const key = k as keyof TrackFx;
+        const r = FX_RANGES[key];
+        if (r) (fx as any)[key] = clamp((fx as any)[key], r[0], r[1]);
+      }
+      commit({ ...p, masterFx: fx }, { history: false });
+    },
+
+    undo: () => {
+      if (!past.length) return;
+      future.push(get().project);
+      restore(past.pop()!);
+    },
+    redo: () => {
+      if (!future.length) return;
+      past.push(get().project);
+      restore(future.pop()!);
     },
 
     _tick: (playhead, step) => set({ playhead, activeStep: step }),

@@ -103,15 +103,36 @@ class AudioEngine {
     this.getProject = getProject;
   }
 
+  private masterRack: TrackNodes | null = null;
+
   ensureContext() {
     if (this.ctx) return;
     this.ctx = new AudioContext();
+    this.impulse = makeImpulse(this.ctx);
     this.master = this.ctx.createGain();
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 512;
-    this.master.connect(this.analyser);
+    // tracks -> master (volume) -> master FX rack -> analyser -> output
+    this.masterRack = buildTrackChain(this.ctx, this.analyser, this.impulse);
+    this.masterRack.gain.gain.value = 1;
+    this.master.connect(this.masterRack.gain);
     this.analyser.connect(this.ctx.destination);
     this.master.gain.value = this.getProject().master;
+  }
+
+  applyMasterFx(fx: TrackFx) {
+    if (!this.ctx || !this.masterRack) return;
+    applyFxToNodes(this.masterRack, fx, this.getProject().bpm);
+  }
+
+  // schedule a one-bar count-in of clicks; returns its duration in ms
+  countInClicks(): number {
+    this.resume();
+    const p = this.getProject();
+    const beat = 60 / p.bpm;
+    const t0 = this.ctx!.currentTime + 0.06;
+    for (let i = 0; i < 4; i++) this.click(t0 + i * beat, i === 0);
+    return Math.round(4 * beat * 1000) + 60;
   }
 
   resume() {
@@ -206,7 +227,7 @@ class AudioEngine {
     for (const t of p.tracks) {
       for (const c of t.clips) {
         if (position > c.start && position < c.start + c.duration) {
-          this.scheduleClip(t.id, c.id, this.playStartCtx, position - c.start);
+          this.scheduleClip(t.id, c, this.playStartCtx, position - c.start);
         }
       }
     }
@@ -225,14 +246,18 @@ class AudioEngine {
     return this.playStartPos + (this.ctx.currentTime - this.playStartCtx);
   }
 
-  private scheduleClip(trackId: string, clipId: string, when: number, offset = 0) {
-    const buf = this.buffers.get(clipId);
+  // schedule a clip. `into` = seconds already elapsed within the clip (for clips
+  // already playing at the transport start). Honors the clip's buffer offset + duration.
+  private scheduleClip(trackId: string, clip: { id: string; offset?: number; duration: number }, when: number, into = 0) {
+    const buf = this.buffers.get(clip.id);
     if (!buf) return;
     const src = this.ctx!.createBufferSource();
     src.buffer = buf;
     src.connect(this.nodes(trackId).gain);
-    src.start(Math.max(when, this.ctx!.currentTime), offset);
-    this.scheduledClips.add(clipId);
+    const bufOffset = Math.min(buf.duration, (clip.offset ?? 0) + into);
+    const remaining = Math.max(0.01, clip.duration - into);
+    src.start(Math.max(when, this.ctx!.currentTime), bufOffset, remaining);
+    this.scheduledClips.add(clip.id);
   }
 
   private scheduler() {
@@ -240,7 +265,9 @@ class AudioEngine {
     const p = this.getProject();
     const ahead = 0.12;
     const s16 = this.sec16(p.bpm);
-    const loopEnd = p.bars * (60 / p.bpm) * 4; // bars * secs/bar
+    const songEnd = p.bars * (60 / p.bpm) * 4; // bars * secs/bar
+    const regionStart = p.loop && p.loopStart != null ? p.loopStart : 0;
+    const regionEnd = p.loop && p.loopEnd != null ? p.loopEnd : songEnd;
     const drumAudible = p.drumTrackId
       ? this.audibleTrack(p, p.drumTrackId)
       : false;
@@ -254,7 +281,7 @@ class AudioEngine {
           c.start >= this.playStartPos &&
           ctxTime < this.ctx.currentTime + ahead
         ) {
-          this.scheduleClip(t.id, c.id, ctxTime);
+          this.scheduleClip(t.id, c, ctxTime);
         }
       }
     }
@@ -263,18 +290,18 @@ class AudioEngine {
     while (this.nextNoteTime < this.ctx.currentTime + ahead) {
       let playhead = this.nextNoteTime - this.playStartCtx + this.playStartPos;
 
-      if (playhead >= loopEnd - 1e-6) {
+      const end = p.loop ? regionEnd : songEnd;
+      if (playhead >= end - 1e-6) {
         if (p.loop) {
-          // re-anchor to the start: the boundary lands exactly on a 16th step,
-          // so playback wraps without a gap
+          // re-anchor to the region start (or song start) without a gap
           this.playStartCtx = this.nextNoteTime;
-          this.playStartPos = 0;
-          this.step = 0;
+          this.playStartPos = regionStart;
+          this.step = Math.round(regionStart / s16);
           this.scheduledClips.clear();
-          playhead = 0;
+          playhead = regionStart;
         } else {
           this.stop();
-          this.onTick?.(loopEnd, 0);
+          this.onTick?.(songEnd, 0);
           return;
         }
       }
@@ -337,44 +364,59 @@ class AudioEngine {
   }
 
   // render the whole arrangement offline to a stereo AudioBuffer (for WAV export)
-  async renderMixdown(): Promise<AudioBuffer> {
+  renderMixdown(): Promise<AudioBuffer> {
+    return this.render();
+  }
+  // render a single track in isolation (a stem); ignores mute/solo
+  renderStem(trackId: string): Promise<AudioBuffer> {
+    return this.render(trackId);
+  }
+
+  private async render(onlyTrackId?: string): Promise<AudioBuffer> {
     this.ensureContext();
     const p = this.getProject();
     const sr = this.ctx!.sampleRate;
     const s16 = this.sec16(p.bpm);
     const total = p.bars * 16;
     const seconds = total * s16;
-    const octx = new OfflineAudioContext(2, Math.ceil((seconds + 1) * sr), sr);
+    const octx = new OfflineAudioContext(2, Math.ceil((seconds + 2) * sr), sr);
+    const impulse = makeImpulse(octx);
 
+    // master volume, then (for the full mix) the master FX rack
     const master = octx.createGain();
     master.gain.value = p.master;
-    master.connect(octx.destination);
+    if (!onlyTrackId) {
+      const rack = buildTrackChain(octx, octx.destination, impulse);
+      rack.gain.gain.value = 1;
+      applyFxToNodes(rack, p.masterFx ?? defaultFx(), p.bpm);
+      master.connect(rack.gain);
+    } else {
+      master.connect(octx.destination);
+    }
 
-    const impulse = makeImpulse(octx);
     const anySolo = p.tracks.some((t) => t.soloed);
     const gainFor = new Map<string, GainNode>();
     for (const t of p.tracks) {
+      if (onlyTrackId && t.id !== onlyTrackId) continue;
       const n = buildTrackChain(octx, master, impulse);
       applyFxToNodes(n, t.fx ?? defaultFx(), p.bpm);
-      const audible = !t.muted && (!anySolo || t.soloed);
+      const audible = onlyTrackId ? true : !t.muted && (!anySolo || t.soloed);
       n.gain.gain.value = audible ? t.volume : 0;
       n.pan.pan.value = t.pan;
       gainFor.set(t.id, n.gain);
     }
 
     const DRUMS: DrumVoice[] = ["kick", "snare", "hat", "clap", "tom", "ride"];
-    for (let step = 0; step < total; step++) {
-      const t = step * s16;
-      const stepInBar = step % 16;
-      // drums (loop every bar)
-      if (p.drumTrackId) {
-        const dg = gainFor.get(p.drumTrackId);
-        if (dg) for (const v of DRUMS)
+    if (p.drumTrackId && gainFor.has(p.drumTrackId)) {
+      const dg = gainFor.get(p.drumTrackId)!;
+      for (let step = 0; step < total; step++) {
+        const t = step * s16;
+        const stepInBar = step % 16;
+        for (const v of DRUMS)
           if (p.drum.voices[v]?.[stepInBar])
             playDrum(octx, dg, v, p.drum.sounds?.[v], t + (stepInBar % 2 ? p.drum.swing * s16 * 0.5 : 0));
       }
     }
-    // instruments + audio clips
     for (const tr of p.tracks) {
       const g = gainFor.get(tr.id);
       if (!g) continue;
@@ -388,11 +430,28 @@ class AudioEngine {
         const src = octx.createBufferSource();
         src.buffer = buf;
         src.connect(g);
-        src.start(c.start);
+        src.start(c.start, c.offset ?? 0, c.duration);
       }
     }
 
     return await octx.startRendering();
+  }
+
+  // preview one instrument note (piano-roll feedback)
+  previewInstrument(trackId: string, midi: number) {
+    this.resume();
+    const tr = this.getProject().tracks.find((t) => t.id === trackId);
+    if (!tr?.instrument) return;
+    playNote(this.ctx!, this.nodes(trackId).gain, tr.instrument.sound, midi, this.ctx!.currentTime + 0.01, 0.35, 0.8);
+  }
+
+  // audition a library sound directly (no track needed) - plays a short phrase
+  previewSound(sound: string, root = 60) {
+    this.resume();
+    const t0 = this.ctx!.currentTime + 0.02;
+    [0, 4, 7, 12].forEach((iv, i) =>
+      playNote(this.ctx!, this.master, sound, root + iv, t0 + i * 0.16, 0.22, 0.8)
+    );
   }
 
   // audition a single drum voice (for clicking pads). Optional explicit sound id

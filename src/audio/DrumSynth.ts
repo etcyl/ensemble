@@ -97,6 +97,7 @@ export const DRUM_LIBRARY: Record<DrumVoice, SoundDef[]> = {
     { id: "tom-low", name: "Low", render: (c, d, t, v) => membrane(c, d, t, "sine", 150, 62, 0.34, 1, v) },
     { id: "tom-high", name: "High", render: (c, d, t, v) => membrane(c, d, t, "sine", 300, 140, 0.22, 1, v) },
     { id: "tom-floor", name: "Floor", render: (c, d, t, v) => membrane(c, d, t, "triangle", 110, 55, 0.4, 1, v) },
+    { id: "tom-roto", name: "Roto", render: (c, d, t, v) => membrane(c, d, t, "sine", 360, 200, 0.18, 0.9, v) },
   ],
   // the 6th slot is a cymbal slot (stored under the legacy key "ride")
   ride: [
@@ -104,8 +105,26 @@ export const DRUM_LIBRARY: Record<DrumVoice, SoundDef[]> = {
     { id: "cym-crash", name: "Crash", render: (c, d, t, v) => { noiseHit(c, d, t, "highpass", 5000, 0.5, 1.0, 0.35, v); noiseHit(c, d, t, "bandpass", 9000, 1, 0.9, 0.2, v); } },
     { id: "cym-splash", name: "Splash", render: (c, d, t, v) => noiseHit(c, d, t, "highpass", 7000, 0.6, 0.35, 0.32, v) },
     { id: "cym-bell", name: "Bell", render: (c, d, t, v) => { membrane(c, d, t, "square", 740, 740, 0.5, 0.2, v); noiseHit(c, d, t, "bandpass", 5200, 4, 0.4, 0.2, v); } },
+    { id: "cym-china", name: "China", render: (c, d, t, v) => { noiseHit(c, d, t, "highpass", 4000, 0.4, 0.7, 0.4, v); noiseHit(c, d, t, "bandpass", 11000, 0.8, 0.6, 0.25, v); } },
   ],
 };
+
+// extra variants appended to keep the diffs small but the palette large
+DRUM_LIBRARY.kick.push(
+  { id: "kick-tight", name: "Tight", render: (c, d, t, v) => membrane(c, d, t, "sine", 170, 55, 0.12, 1, v) },
+  { id: "kick-deep", name: "Deep", render: (c, d, t, v) => membrane(c, d, t, "sine", 110, 35, 0.5, 1, v) },
+);
+DRUM_LIBRARY.snare.push(
+  { id: "snare-deep", name: "Deep", render: (c, d, t, v) => { noiseHit(c, d, t, "highpass", 1000, 0.6, 0.22, 0.6, v); membrane(c, d, t, "triangle", 150, 140, 0.16, 0.5, v); } },
+  { id: "snare-clap", name: "Clap-Snare", render: (c, d, t, v) => { noiseHit(c, d, t, "bandpass", 1600, 1, 0.12, 0.7, v); noiseHit(c, d, t, "highpass", 2000, 0.7, 0.08, 0.4, v); } },
+);
+DRUM_LIBRARY.hat.push(
+  { id: "hat-shaker", name: "Shaker", render: (c, d, t, v) => noiseHit(c, d, t, "bandpass", 9000, 0.6, 0.06, 0.3, v) },
+  { id: "hat-wide", name: "Wide Open", render: (c, d, t, v) => noiseHit(c, d, t, "highpass", 6500, 0.6, 0.45, 0.3, v) },
+);
+DRUM_LIBRARY.clap.push(
+  { id: "clap-808", name: "808 Clap", render: (c, d, t, v) => noiseHit(c, d, t, "bandpass", 1400, 1.2, 0.14, 0.6, v) },
+);
 
 export interface Kit { id: string; name: string; sounds: Record<DrumVoice, string>; }
 
@@ -115,6 +134,11 @@ export const DRUM_KITS: Kit[] = [
   { id: "acoustic", name: "Acoustic", sounds: { kick: "kick-acoustic", snare: "snare-acoustic", hat: "hat-pedal", clap: "clap-rim", tom: "tom-high", ride: "cym-ride" } },
   { id: "punchy", name: "Punchy Pop", sounds: { kick: "kick-punch", snare: "snare-classic", hat: "hat-tight", clap: "clap-clap", tom: "tom-mid", ride: "cym-splash" } },
   { id: "lofi", name: "Lo-Fi", sounds: { kick: "kick-808", snare: "snare-brush", hat: "hat-open", clap: "clap-snap", tom: "tom-floor", ride: "cym-bell" } },
+  { id: "house", name: "House", sounds: { kick: "kick-tight", snare: "snare-clap", hat: "hat-shaker", clap: "clap-808", tom: "tom-mid", ride: "cym-splash" } },
+  { id: "techno", name: "Techno", sounds: { kick: "kick-deep", snare: "snare-rim", hat: "hat-tight", clap: "clap-808", tom: "tom-roto", ride: "cym-china" } },
+  { id: "rock", name: "Rock", sounds: { kick: "kick-punch", snare: "snare-deep", hat: "hat-closed", clap: "clap-clap", tom: "tom-floor", ride: "cym-crash" } },
+  { id: "jazz", name: "Jazz Brush", sounds: { kick: "kick-round", snare: "snare-brush", hat: "hat-pedal", clap: "clap-rim", tom: "tom-high", ride: "cym-ride" } },
+  { id: "edm", name: "EDM", sounds: { kick: "kick-deep", snare: "snare-clap", hat: "hat-wide", clap: "clap-808", tom: "tom-roto", ride: "cym-china" } },
 ];
 
 export function defaultKit(): Kit {

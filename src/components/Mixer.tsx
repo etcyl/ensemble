@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import { engine } from "../audio/AudioEngine";
 import ChannelFxPanel from "./ChannelFxPanel";
+import Icon from "./Icon";
 
 export default function Mixer() {
   const tracks = useStore((s) => s.project.tracks);
@@ -11,6 +12,7 @@ export default function Mixer() {
   const setTrackFx = useStore((s) => s.setTrackFx);
   const [level, setLevel] = useState(0);
   const [fxTrack, setFxTrack] = useState<string | null>(null);
+  const [masterFxOpen, setMasterFxOpen] = useState(false);
   const raf = useRef(0);
 
   useEffect(() => {
@@ -71,7 +73,7 @@ export default function Mixer() {
                 title="Open the full effects rack for this channel: sweepable EQ, reverb, delay and compression"
                 onClick={() => setFxTrack(t.id)}
               >
-                ⚙
+                <Icon name="sliders" size={12} />
               </button>
             </div>
             <div className="fx" title="Quick effects: 3-band EQ and a reverb send. Click the gear for the full rack (EQ sweep, delay, compression). You can also set these by command, e.g. 'add reverb to channel 1'.">
@@ -104,6 +106,7 @@ export default function Mixer() {
         ))}
         <div className="strip master" title="Master output: the final mix everyone hears">
           <div className="nm" style={{ color: "var(--amber)" }}>Master</div>
+          <button className="minibtn fxbtn" title="Master FX rack: EQ, compression and limiting on the whole mix" onClick={() => setMasterFxOpen(true)}><Icon name="sliders" size={12} /></button>
           <div className="faderwrap">
             <input
               className="fader"
@@ -123,6 +126,7 @@ export default function Mixer() {
         </div>
       </div>
       {fxTrack && <ChannelFxPanel trackId={fxTrack} onClose={() => setFxTrack(null)} />}
+      {masterFxOpen && <ChannelFxPanel master onClose={() => setMasterFxOpen(false)} />}
     </div>
   );
 }

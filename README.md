@@ -37,7 +37,18 @@ npm run dev          # opens http://localhost:5180
 - **Voice commands** (Chromium browsers): "play", "stop", "record", "add track",
   "set tempo to 120", "metronome off", "louder" / "softer", "harmonize", "export"
 - **Keyboard**: `Space` play/stop, `R` record
-- **User guide**: a comprehensive PDF at `docs/Ensemble-Guide.pdf` (`npm run guide` to rebuild)
+- **Arrangement editing**: move / trim / split / duplicate / delete clips, snap-to-grid,
+  timeline zoom, a draggable loop/cycle region, and full undo/redo
+- **Piano roll**: edit instrument-track notes (add / move / resize / delete) on a grid,
+  and swap the track's voice from the sound library
+- **Sound library**: 20 generated instrument voices (basses, keys, pads, plucks, leads,
+  bells, brass) and 10 drum kits - audition and add from the Sounds browser, all synthesized
+- **Per-channel + master FX**: sweepable 3-band EQ, reverb, tempo-syncable delay,
+  compression - on every channel and on the master bus
+- **Recording aids**: one-bar count-in and tap tempo
+- **Export**: full stereo mixdown or per-track stems to .wav
+- **User guide**: a comprehensive PDF at `docs/Ensemble-Guide.pdf` (`npm run guide` to rebuild);
+  a DAW parity gap-analysis lives in `docs/DAW_PARITY.md`
 
 ### Keyboard + voice cheat sheet
 | Action | Key | Say |
@@ -99,7 +110,8 @@ is unchanged. Electron is the default here because it builds with Node alone.
 ## Roadmap (not yet built)
 
 - Instrument sample libraries (real guitar/bass/piano samples) alongside the synths
-- Per-track effects (reverb/EQ/compression) and clip editing/trimming
-- Piano-roll editing of generated instrument parts
+- Automation lanes (draw volume/FX curves over time)
+- Audio warp / time-stretch and pitch correction (needs heavier DSP)
 - Deeper analysis (chord-change detection over time, not just an overall key)
+- See `docs/DAW_PARITY.md` for the full Cubase/Ableton gap analysis
 ```

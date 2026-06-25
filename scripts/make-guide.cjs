@@ -227,6 +227,7 @@ bullets([
   "Compression: evens out the level and adds punch - higher amount = more squash.",
 ]);
 p("You do not have to touch any of it by hand. Everything here can be driven by a typed or spoken command - see section 10 - for example \"add reverb to channel 1\", \"add delay to channel 2\", \"compress channel 1\", or \"cut the lows on channel 2\". All effects are baked into the exported mixdown.");
+p("The Master strip has its own FX rack too (the gear on the Master channel): the same EQ, compression and limiting applied to the whole mix. Drive it by saying \"compress the master\" or \"bring up the highs on the master\".");
 
 h1("9. Harmonize - automatic accompaniment");
 p("Harmonize adds instrument parts (and optionally drums) that fit your song. It can work from scratch, or it can listen to an existing track, show you what it hears, and let you correct everything before it plays a single note.");
@@ -310,26 +311,71 @@ table(
     ["add a track", "\"new channel\"", "Adds an audio track."],
     ["harmonize", "\"add drums\"", "Opens the Harmonize panel."],
     ["export / bounce / mixdown", "\"render\"", "Renders the song to a .wav download."],
+    ["export stems", "\"bounce tracks\"", "Bounces every track to its own .wav."],
+    ["undo / redo", "\"undo\", \"redo\"", "Steps backward or forward through your edits."],
+    ["split / duplicate / delete clip", "\"split clip\", \"duplicate clip\"", "Edits the selected clip."],
+    ["snap on/off, zoom in/out", "\"snap off\", \"zoom in\"", "Grid snapping and timeline zoom."],
+    ["count in on/off", "\"count in on\"", "One-bar pre-roll before recording."],
+    ["move channel up/down", "\"move channel 2 up\"", "Reorders tracks."],
+    ["clear loop", "\"clear cycle\"", "Removes the loop region."],
+    ["effects on the master", "\"compress the master\"", "Targets the master bus instead of a channel."],
   ]
 );
 
-h1("11. Projects, autosave and export");
+h1("11. Editing the arrangement");
+p("Recorded and imported audio sit on the timeline as clips you can shape:");
+bullets([
+  "Move: drag a clip left/right to reposition it in time.",
+  "Trim: drag a clip's left or right edge to shorten or extend it.",
+  "Split: select a clip, put the playhead inside it, and Split (S key, or say/type \"split clip\").",
+  "Duplicate: Ctrl+D, or \"duplicate clip\" - drops a copy right after the original.",
+  "Delete: select and press Delete, or \"delete clip\".",
+]);
+h2("Snap, grid and zoom");
+bullets([
+  "Snap (the toolbar Snap button, or N) locks moves and trims to the grid.",
+  "Grid sets the resolution edits snap to: bar, 1/2, 1/4, 1/8 or 1/16.",
+  "Zoom in/out with the +/- toolbar buttons or the + and - keys to see more or less detail.",
+]);
+h2("Loop / cycle region");
+p("Drag across the ruler to paint a loop region (a cycle). With Loop on, playback repeats just that region - perfect for working on one section. A single click on the ruler instead moves the playhead; 'Clear loop' (toolbar) or \"clear loop\" removes the region.");
+h2("Undo / redo");
+p("Every edit is undoable: Ctrl+Z to undo, Ctrl+Shift+Z (or Ctrl+Y) to redo, or just say \"undo\". Rapid changes during a single drag collapse into one undo step. The toolbar also has undo/redo arrows.");
+
+h1("12. The piano roll");
+p("Instrument tracks (from Harmonize, or any instrument track) can be edited note-by-note. Click the pencil on the track header, or double-click the track's lane, to open the piano roll.");
+bullets([
+  "Add a note: click an empty cell. Drag right as you release to set its length.",
+  "Move a note: drag its body up/down (pitch) or left/right (time).",
+  "Resize: drag a note's right edge.",
+  "Delete: double-click a note. 'Clear notes' empties the track.",
+]);
+p("Notes preview as you place them, and everything stays locked to the project tempo and grid.");
+
+h1("13. Projects, autosave and export");
 bullets([
   "Autosave: every change is written to your browser automatically (the 'autosaved' chip up top).",
   "Projects panel: start a new named song, open or delete saved songs, Save current, or Export the project as a .json backup you can keep or share.",
-  "Export WAV: 'Export WAV' (top bar) renders the entire arrangement - drums, instruments and recordings - to a single stereo .wav file, respecting your mix, mutes and solos.",
+  "Export WAV: renders the whole arrangement - drums, instruments and recordings, plus the master FX - to one stereo .wav, respecting your mix, mutes and solos.",
+  "Export Stems: bounces each track to its own .wav (ignoring mute/solo) for handing off to another studio.",
 ]);
 
-h1("12. Keyboard shortcuts");
+h1("14. Keyboard shortcuts");
 table(
   ["Key", "Action", "Notes"],
   [
     ["Spacebar", "Play / Stop", "Ignored while typing in a text field."],
     ["R", "Record", "Toggles recording on the armed track."],
+    ["S", "Split clip", "Splits the selected clip at the playhead."],
+    ["Ctrl/Cmd + D", "Duplicate clip", "Copies the selected clip."],
+    ["Delete / Backspace", "Delete clip", "Removes the selected clip."],
+    ["Ctrl/Cmd + Z", "Undo", "Shift to Redo (or Ctrl/Cmd + Y)."],
+    ["N", "Toggle snap", "Snap edits to the grid on/off."],
+    ["+ / -", "Zoom in / out", "Horizontal timeline zoom."],
   ]
 );
 
-h1("13. Troubleshooting");
+h1("15. Troubleshooting");
 bullets([
   "No sound? Click anywhere first - browsers require a user gesture before audio can start. Then press Play.",
   "Microphone not working? Check the browser's site permissions and that the right input device is selected in your OS.",

@@ -11,7 +11,7 @@ export interface Note {
 }
 
 export interface InstrumentConfig {
-  sound: InstrumentSound;
+  sound: string; // a sound id from the instrument library
   notes: Note[];
 }
 
@@ -42,7 +42,8 @@ export interface Clip {
   id: string;
   name: string;
   start: number; // seconds on the timeline
-  duration: number; // seconds
+  duration: number; // seconds (may be shorter than the buffer if trimmed/split)
+  offset?: number; // seconds into the source buffer this clip starts at
   // base64-encoded WAV for persistence; the live AudioBuffer lives in the engine
   audio?: string;
   peaks?: number[]; // downsampled waveform for drawing
@@ -128,5 +129,12 @@ export interface Project {
   drum: DrumPattern;
   drumTrackId: string | null;
   harmonize: HarmonizeSettings;
+  masterFx: TrackFx;
+  snap: boolean; // snap edits to the grid
+  grid: string; // grid division, e.g. "1/4", "1/8", "1" (bar)
+  zoom: number; // pixels per bar in the arrange view
+  loopStart: number | null; // cycle region start in seconds (null = whole song)
+  loopEnd: number | null; // cycle region end in seconds
+  countIn: boolean; // one-bar count-in before recording
   updatedAt: number;
 }
